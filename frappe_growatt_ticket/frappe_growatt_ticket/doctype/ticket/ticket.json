@@ -1,0 +1,321 @@
+{
+ "actions": [],
+ "allow_events_in_timeline": 1,
+ "creation": "2025-10-27 13:53:13.287605",
+ "default_view": "List",
+ "doctype": "DocType",
+ "email_append_to": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "tab_public",
+  "section_customer",
+  "main_customer_email",
+  "column_break_owbg",
+  "main_customer_name",
+  "section_eqp",
+  "colbreak_eqp_1",
+  "main_eqp_serial_no",
+  "main_eqp_model_ref",
+  "main_eqp_item_code",
+  "main_eqp_model",
+  "main_eqp_mppt_number",
+  "main_eqp_phase",
+  "colbreak_eqp_2",
+  "main_eqp_type",
+  "main_eqp_group",
+  "main_eqp_family",
+  "main_eqp_error_version",
+  "service_partner_company",
+  "main_eqp_warehouse",
+  "colbreak_eqp_3",
+  "main_uf_installation",
+  "distributor",
+  "main_eqp_start_firmware",
+  "main_eqp_end_firmware",
+  "section_checklist_links",
+  "add_child_button",
+  "child_tracker_html",
+  "child_tracker_table",
+  "tab_system",
+  "fields_section",
+  "sub_workflow",
+  "ticket_docname",
+  "priority",
+  "email_applicant",
+  "subject_email"
+ ],
+ "fields": [
+  {
+   "fieldname": "tab_public",
+   "fieldtype": "Tab Break",
+   "label": "Public"
+  },
+  {
+   "fieldname": "section_customer",
+   "fieldtype": "Section Break",
+   "label": "Informa\u00e7\u00f5es do Cliente"
+  },
+  {
+   "fieldname": "main_customer_email",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "Email Principal",
+   "options": "User",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_owbg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "main_customer_email.full_name",
+   "fieldname": "main_customer_name",
+   "fieldtype": "Data",
+   "label": "Nome Completo",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_eqp",
+   "fieldtype": "Section Break",
+   "label": "Informa\u00e7\u00f5es do Equipamento"
+  },
+  {
+   "fieldname": "colbreak_eqp_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "main_eqp_serial_no",
+   "fieldtype": "Data",
+   "label": "N\u00famero de S\u00e9rie",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "main_eqp_model_ref",
+   "fieldtype": "Link",
+   "label": "Refer\u00eancia do Modelo",
+   "options": "Item",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fetch_from": "main_eqp_model_ref.item_code",
+   "fetch_if_empty": 1,
+   "fieldname": "main_eqp_item_code",
+   "fieldtype": "Data",
+   "label": "C\u00f3digo do Modelo",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "main_eqp_model_ref.item_name",
+   "fieldname": "main_eqp_model",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Modelo",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "main_eqp_mppt_number",
+   "fieldtype": "Data",
+   "label": "N\u00famero de MPPTs",
+   "mandatory_depends_on": "eval:doc.main_eqp_group == \"Inverter\" || doc.main_eqp_group == \"Inversor\";",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "main_eqp_phase",
+   "fieldtype": "Data",
+   "label": "Fase do Inversor",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "colbreak_eqp_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "main_eqp_type",
+   "fieldtype": "Data",
+   "label": "Tipo",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "main_eqp_model_ref.item_group",
+   "fetch_if_empty": 1,
+   "fieldname": "main_eqp_group",
+   "fieldtype": "Data",
+   "label": "Grupo",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "main_eqp_model_ref.custom_family",
+   "fetch_if_empty": 1,
+   "fieldname": "main_eqp_family",
+   "fieldtype": "Data",
+   "label": "Familia",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "main_eqp_model_ref.custom_error_version",
+   "fieldname": "main_eqp_error_version",
+   "fieldtype": "Data",
+   "label": "Vers\u00e3o",
+   "permlevel": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_partner_company",
+   "fieldtype": "Link",
+   "label": "Parceiro de Servi\u00e7o",
+   "link_filters": "[[\"Company\",\"custom_service_partner\",\"=\",1]]",
+   "options": "Company",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "main_eqp_warehouse",
+   "fieldtype": "Data",
+   "label": "Equipment Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "colbreak_eqp_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "main_uf_installation",
+   "fieldtype": "Link",
+   "label": "UF da Instala\u00e7\u00e3o",
+   "options": "UF",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "distributor",
+   "fieldtype": "Link",
+   "label": "Distribuidor",
+   "options": "Distributor",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "main_eqp_start_firmware",
+   "fieldtype": "Data",
+   "label": "Firmware Inicial",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "main_eqp_end_firmware",
+   "fieldtype": "Data",
+   "label": "Firmware Final",
+   "permlevel": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_checklist_links",
+   "fieldtype": "Section Break",
+   "label": "Documentos Derivados"
+  },
+  {
+   "depends_on": "eval:doc.workflow_state!=\"Draft\"\r\n",
+   "fieldname": "add_child_button",
+   "fieldtype": "Button",
+   "label": "+ Criar Derivado",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "child_tracker_html",
+   "fieldtype": "HTML",
+   "label": "Child Tracker - HTML"
+  },
+  {
+   "fieldname": "child_tracker_table",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Child Tracker",
+   "options": "Child Tracker Table",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tab_system",
+   "fieldtype": "Tab Break",
+   "hidden": 1,
+   "label": "Private",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fields_section",
+   "fieldtype": "Section Break",
+   "label": "Fields"
+  },
+  {
+   "fieldname": "sub_workflow",
+   "fieldtype": "Data",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "Sub-Workflow"
+  },
+  {
+   "description": "*<strong>Referenciado</strong> com o documento acima. Acesse o link para visualizar.",
+   "fieldname": "ticket_docname",
+   "fieldtype": "Link",
+   "label": "Protocolo Referenciado",
+   "options": "Ticket",
+   "read_only": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "label": "Prioridade",
+   "options": "\nM\u00e1xima\nReclame Aqui\nProcesso Judicial"
+  },
+  {
+   "fieldname": "email_applicant",
+   "fieldtype": "Data",
+   "label": "E-mail",
+   "options": "Email"
+  },
+  {
+   "fieldname": "subject_email",
+   "fieldtype": "Data",
+   "label": "Subject E-mail"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-11-13 17:41:05.779476",
+ "modified_by": "Administrator",
+ "module": "Frappe Growatt Ticket",
+ "name": "Ticket",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sender_field": "email_applicant",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "subject_field": "subject_email",
+ "track_changes": 1
+}
