@@ -13,7 +13,7 @@ const ticket_utils = {
     const wsp = agt.utils.table.row.find(cur_frm, 'checklist_table_service_protocol', { or: { docstatus: [0] } });
 
     const clean_dict = Object.entries(fields_record)
-      .filter(([k, v]) => v.value !== undefined)
+      .filter(([_, v]) => v.value !== undefined)
       .reduce((acc, [k, v]) => {
         acc[k] = v.value;
         return acc;
@@ -236,18 +236,22 @@ const ticket_utils = {
     ];
 
     // Espelhar todos os documentos relacionados pelo ticket_docname
-    await agt.child_tracker_table.mirror(frm, doctypes, 'ticket_docname');
+    
+    await agt.corrections_tracker.table.mirror_child_tracker_table(frm, doctypes, 'ticket_docname');
+
+    const childTrackerField = frm.fields_dict['child_tracker_html'];
+    if (!childTrackerField?.$wrapper) return;
 
     agt.utils.form.render_doc_fields_table(
-      frm.fields_dict.child_tracker_html.$wrapper,
-      frm.doc.child_tracker_table,
+      childTrackerField.$wrapper,
+      frm.doc['child_tracker_table'],
       [
         {
           fieldname: 'child_tracker_docname',
           label: 'Visualizar Documento',
           formatter: (value, doc) => {
-            if (!value || !doc.child_tracker_doctype) return String(value || '');
-            return `<a href="#" class="child-tracker-open" data-doctype="${String(doc.child_tracker_doctype).replace(/\"/g, '&quot;')}" data-docname="${String(value).replace(/\"/g, '&quot;')}">${String(value)} <i class="fa fa-external-link" style="font-size: 1.25em; color: var(--text-muted)"></i></a>`;
+            if (!value || !doc['child_tracker_doctype']) return String(value || '');
+            return `<a href="#" class="child-tracker-open" data-doctype="${String(doc['child_tracker_doctype']).replace(/\"/g, '&quot;')}" data-docname="${String(value).replace(/\"/g, '&quot;')}">${String(value)} <i class="fa fa-external-link" style="font-size: 1.25em; color: var(--text-muted)"></i></a>`;
           }
         },
         {
@@ -262,7 +266,7 @@ const ticket_utils = {
         {
           fieldname: 'child_tracker_workflow_state',
           label: 'Status do Documento',
-          formatter: (value, doc, meta) => {
+          formatter: (value, doc) => {
             if (!value) return String(value || '');
 
             const state = String(value);
@@ -294,7 +298,7 @@ const ticket_utils = {
             };
 
             // Tenta primeiro usar os metadados do workflow do Frappe
-            const doctype = doc.child_tracker_doctype;
+            const doctype = doc['child_tracker_doctype'];
             if (doctype && (window as any).frappe?.boot?.workflows) {
               try {
                 const workflows = (window as any).frappe.boot.workflows as Record<string, any>;
@@ -322,7 +326,7 @@ const ticket_utils = {
 
     // attach click handler to open modal
     try {
-      const childTrackerHtml = frm.fields_dict.child_tracker_html;
+      const childTrackerHtml = frm.fields_dict['child_tracker_html'];
       if (childTrackerHtml && childTrackerHtml.$wrapper) {
         const wrapper = childTrackerHtml.$wrapper.get(0);
         (wrapper as any)?.removeEventListener?.('__growatt_child_click' as any, () => { });
@@ -339,7 +343,7 @@ const ticket_utils = {
           const doctype = $el.attr('data-doctype');
           const docname = $el.attr('data-docname');
           if (!doctype || !docname) return;
-          agt.iframe._open_doc_modal(doctype, docname);
+          frappe.iframe_view._open_doc_modal(doctype, docname);
         });
     }
   },
