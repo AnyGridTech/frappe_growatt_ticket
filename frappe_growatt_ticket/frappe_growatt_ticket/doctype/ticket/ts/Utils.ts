@@ -312,7 +312,7 @@ const ticket_utils = {
                   }
                 }
               } catch (e) {
-                console.warn('Erro ao acessar workflow metadata:', e);
+                console.warn('Error accessing workflow metadata:', e);
               }
             }
 
