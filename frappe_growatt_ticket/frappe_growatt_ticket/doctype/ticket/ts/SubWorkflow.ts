@@ -18,14 +18,14 @@ const subWorkflowList: Record<string, string[]> = {
   "Compliance Statement": ["Logistics"],
 };
 
-async function handleServiceProtocol(frm: FrappeForm) {
+async function handleServiceProtocol(form: FrappeForm) {
   const dt_name = "Service Protocol";
   const fieldname = "child_tracker_table";
-  if ((frm as any)._subworkflow_creating) return;
-  (frm as any)._subworkflow_creating = true;
+  if ((form as any)._subworkflow_creating) return;
+  (form as any)._subworkflow_creating = true;
   try {
     const existingServiceProtocols = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: frm.doc.name },
+      filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
     if (existingServiceProtocols && existingServiceProtocols.length > 0) {
@@ -35,37 +35,37 @@ async function handleServiceProtocol(frm: FrappeForm) {
     }
     // Checa novamente antes de criar
     const freshProtocols = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: frm.doc.name },
+      filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
     if (freshProtocols && freshProtocols.length > 0) return;
-    const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, frm.fields_dict);
+    const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, form.fields_dict);
     if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
     const checklist_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
     const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
-    await agt.utils.table.row.add_one(frm, fieldname, {
+    await agt.utils.table.row.add_one(form, fieldname, {
       child_tracker_docname: docname,
       child_tracker_doctype: dt_name,
       child_tracker_workflow_state: workflow_state
     });
-    await frm.set_value('sub_workflow', "Service Protocol");
-    frm.doc['sub_workflow'] = "Service Protocol";
-    frm.dirty();
-    await frm.save();
+    await form.set_value('sub_workflow', "Service Protocol");
+    form.doc['sub_workflow'] = "Service Protocol";
+    form.dirty();
+    await form.save();
   } finally {
-    (frm as any)._subworkflow_creating = false;
+    (form as any)._subworkflow_creating = false;
   }
 }
 
-async function handleChecklist(frm: FrappeForm) {
-  const main_eqp_group = frm.doc['main_eqp_group'];
+async function handleChecklist(form: FrappeForm) {
+  const main_eqp_group = form.doc['main_eqp_group'];
   const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
   if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
   const [doctype, fieldname] = [pair.doctype, pair.table_field];
-  if ((frm as any)._subworkflow_creating) return;
-  (frm as any)._subworkflow_creating = true;
+  if ((form as any)._subworkflow_creating) return;
+  (form as any)._subworkflow_creating = true;
   try {
-    const trackerRows = frm.doc[fieldname as keyof typeof frm.doc] as ChecklistTracker[];
+    const trackerRows = form.doc[fieldname as keyof typeof form.doc] as ChecklistTracker[];
     if (trackerRows?.length) {
       const not_rejected = trackerRows.filter(cit =>
         cit.child_tracker_workflow_state !== agt.metadata.doctype.service_protocol.workflow_state.rejected.name &&
@@ -74,35 +74,35 @@ async function handleChecklist(frm: FrappeForm) {
       if (not_rejected?.length) {
         const available_list_html = not_rejected.map(cit => `<li> ${cit.child_tracker_docname || cit.name || 'Sem nome'} </li>`).join("");
         console.warn(`Já existe um ${doctype} vinculado a este Ticket: <br><ul>${available_list_html}</ul>`);
-        await frm.set_value('sub_workflow', "Checklist");
-        frm.doc['sub_workflow'] = "Checklist";
-        frm.dirty();
-        await frm.save();
+        await form.set_value('sub_workflow', "Checklist");
+        form.doc['sub_workflow'] = "Checklist";
+        form.dirty();
+        await form.save();
         return;
       }
     }
     // Checa novamente antes de criar
-    const freshRows = frm.doc[fieldname as keyof typeof frm.doc] as ChecklistTracker[];
+    const freshRows = form.doc[fieldname as keyof typeof form.doc] as ChecklistTracker[];
     if (freshRows?.some(cit => cit.child_tracker_doctype === doctype)) return;
     // ...aqui pode adicionar lógica de criação se necessário...
   } finally {
-    (frm as any)._subworkflow_creating = false;
+    (form as any)._subworkflow_creating = false;
   }
 }
 
-async function handleProposedDispatch(frm: FrappeForm) {
+async function handleProposedDispatch(form: FrappeForm) {
   const dt_name = "Proposed Dispatch";
   const fieldname = "child_tracker_table";
-  const main_eqp_group = frm.doc['main_eqp_group'];
+  const main_eqp_group = form.doc['main_eqp_group'];
   const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
   if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
-  if ((frm as any)._subworkflow_creating) return;
-  (frm as any)._subworkflow_creating = true;
+  if ((form as any)._subworkflow_creating) return;
+  (form as any)._subworkflow_creating = true;
   try {
     // Checklist do tipo correto deve estar concluído
     const checklist_doctype = pair.doctype;
     const checklist_fieldname = pair.table_field;
-    const trackerRows = frm.doc[checklist_fieldname as keyof typeof frm.doc] as ChecklistTracker[];
+    const trackerRows = form.doc[checklist_fieldname as keyof typeof form.doc] as ChecklistTracker[];
     const completedChecklist = trackerRows?.find(cit =>
       cit.child_tracker_doctype === checklist_doctype &&
       (cit.child_tracker_workflow_state === agt.metadata.doctype.service_protocol.workflow_state.finished.name ||
@@ -114,7 +114,7 @@ async function handleProposedDispatch(frm: FrappeForm) {
     }
     // Não criar se já existir Proposed Dispatch
     const existingPD = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: frm.doc.name },
+      filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
     if (existingPD && existingPD.length > 0) {
@@ -124,40 +124,40 @@ async function handleProposedDispatch(frm: FrappeForm) {
     }
     // Checa novamente antes de criar
     const freshPD = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: frm.doc.name },
+      filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
     if (freshPD && freshPD.length > 0) return;
-    const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, frm.fields_dict);
+    const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, form.fields_dict);
     if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
     const pd_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
     const workflow_state = pd_doc?.message?.workflow_state || 'Draft';
-    await agt.utils.table.row.add_one(frm, fieldname, {
+    await agt.utils.table.row.add_one(form, fieldname, {
       child_tracker_docname: docname,
       child_tracker_doctype: dt_name,
       child_tracker_workflow_state: workflow_state
     });
-    await frm.set_value('sub_workflow', "Proposed Dispatch");
-    frm.doc['sub_workflow'] = "Proposed Dispatch";
-    frm.dirty();
-    await frm.save();
+    await form.set_value('sub_workflow', "Proposed Dispatch");
+    form.doc['sub_workflow'] = "Proposed Dispatch";
+    form.dirty();
+    await form.save();
   } finally {
-    (frm as any)._subworkflow_creating = false;
+    (form as any)._subworkflow_creating = false;
   }
 }
 
-async function handleComplianceStatement(frm: FrappeForm) {
+async function handleComplianceStatement(form: FrappeForm) {
   const dt_name = "Compliance Statement";
   const fieldname = "child_tracker_table";
-  const main_eqp_group = frm.doc['main_eqp_group'];
+  const main_eqp_group = form.doc['main_eqp_group'];
   const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
   if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
-  if ((frm as any)._subworkflow_creating) return;
-  (frm as any)._subworkflow_creating = true;
+  if ((form as any)._subworkflow_creating) return;
+  (form as any)._subworkflow_creating = true;
   try {
     const checklist_doctype = pair.doctype;
     const checklist_fieldname = pair.table_field;
-    const trackerRows = frm.doc[checklist_fieldname as keyof typeof frm.doc] as ChecklistTracker[];
+    const trackerRows = form.doc[checklist_fieldname as keyof typeof form.doc] as ChecklistTracker[];
     const completedChecklist = trackerRows?.find(cit =>
       cit.child_tracker_doctype === checklist_doctype &&
       (cit.child_tracker_workflow_state === agt.metadata.doctype.service_protocol.workflow_state.finished.name ||
@@ -168,7 +168,7 @@ async function handleComplianceStatement(frm: FrappeForm) {
       return;
     }
     const existingComplianceStatement = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: frm.doc.name },
+      filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
     if (existingComplianceStatement && existingComplianceStatement.length > 0) {
@@ -178,45 +178,45 @@ async function handleComplianceStatement(frm: FrappeForm) {
     }
     // Checa novamente antes de criar
     const freshCompliance = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: frm.doc.name },
+      filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
     if (freshCompliance && freshCompliance.length > 0) return;
-    const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, frm.fields_dict);
+    const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, form.fields_dict);
     if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
     const checklist_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
     const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
-    await agt.utils.table.row.add_one(frm, fieldname, {
+    await agt.utils.table.row.add_one(form, fieldname, {
       child_tracker_docname: docname,
       child_tracker_doctype: dt_name,
       child_tracker_workflow_state: workflow_state
     });
-    await frm.set_value('sub_workflow', "Compliance Statement");
-    frm.doc['sub_workflow'] = "Compliance Statement";
-    frm.dirty();
-    await frm.save();
+    await form.set_value('sub_workflow', "Compliance Statement");
+    form.doc['sub_workflow'] = "Compliance Statement";
+    form.dirty();
+    await form.save();
   } finally {
-    (frm as any)._subworkflow_creating = false;
+    (form as any)._subworkflow_creating = false;
   }
 }
 
 
 // Validações centralizadas para cada etapa
-const subWorkflowValidators: Record<string, (frm: FrappeForm) => Promise<string | null>> = {
-  "Checklist": async (frm) => {
+const subWorkflowValidators: Record<string, (form: FrappeForm) => Promise<string | null>> = {
+  "Checklist": async (form) => {
     // Só pode avançar para Checklist se existir Service Protocol vinculado
-    const trackerRows = frm.doc["child_tracker_table"] as ChecklistTracker[];
+    const trackerRows = form.doc["child_tracker_table"] as ChecklistTracker[];
     const hasServiceProtocol = trackerRows?.some(row => row.child_tracker_doctype === "Service Protocol");
     if (!hasServiceProtocol) return "É necessário criar o Service Protocol antes de avançar para Checklist.";
     return null;
   },
-  "Compliance Statement": async (frm) => {
+  "Compliance Statement": async (form) => {
     // Só pode avançar para Compliance Statement se Checklist estiver concluído
-    const main_eqp_group = frm.doc['main_eqp_group'];
+    const main_eqp_group = form.doc['main_eqp_group'];
     const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
     if (!pair) return `Grupo do equipamento não é '${main_eqp_group}'`;
     const checklist_doctype = pair.doctype;
-    const trackerRows = frm.doc[pair.table_field as keyof typeof frm.doc] as ChecklistTracker[];
+    const trackerRows = form.doc[pair.table_field as keyof typeof form.doc] as ChecklistTracker[];
     const completedChecklist = trackerRows?.find(cit =>
       cit.child_tracker_doctype === checklist_doctype &&
       (cit.child_tracker_workflow_state === agt.metadata.doctype.service_protocol.workflow_state.finished.name ||
@@ -228,11 +228,11 @@ const subWorkflowValidators: Record<string, (frm: FrappeForm) => Promise<string 
   // Adicione outras validações conforme necessário
 };
 
-function moveFowardButton(frm: FrappeForm) {
+function moveFowardButton(form: FrappeForm) {
   if (!frappe.boot.user.roles.includes("System Manager")) return;
 
   const $button = cur_frm.add_custom_button(__("Avançar subetapa"), async () => {
-    const current = frm.doc['sub_workflow'];
+    const current = form.doc['sub_workflow'];
     const nextSteps = subWorkflowList[current] || [];
     if (!nextSteps.length) {
       frappe.msgprint(__("Não há próximas etapas disponíveis."));
@@ -255,7 +255,7 @@ function moveFowardButton(frm: FrappeForm) {
         const status = values.next_status;
         // Validação centralizada
         if (subWorkflowValidators[status]) {
-          const errorMsg = await subWorkflowValidators[status](frm);
+          const errorMsg = await subWorkflowValidators[status](form);
           if (errorMsg) {
             frappe.msgprint({
               title: __("Critério não atendido"),
@@ -268,8 +268,8 @@ function moveFowardButton(frm: FrappeForm) {
         frappe.confirm(
           __("Confirmar criará um doctype do tipo <b>" + status + "</b> e essa ação é irreversível. Deseja seguir?"),
           async () => {
-            await frm.set_value('sub_workflow', status);
-            frm.doc['sub_workflow'] = status;
+            await form.set_value('sub_workflow', status);
+            form.doc['sub_workflow'] = status;
             frappe.msgprint(__("Subetapa avançada para: " + status));
           },
           () => {
@@ -291,39 +291,39 @@ function moveFowardButton(frm: FrappeForm) {
     if ($button.parent().find('.sub-workflow-indicator').length === 0) {
       const $pill = $(`
         <span class="indicator-pill red sub-workflow-indicator" style="margin-right: 6px; vertical-align: middle;">
-          <span class="indicator-label">${__("Subetapa")}: ${frm.doc['sub_workflow'] || ''}</span>
+          <span class="indicator-label">${__("Subetapa")}: ${form.doc['sub_workflow'] || ''}</span>
         </span>
       `);
       $button.before($pill);
     } else {
-      $button.parent().find('.sub-workflow-indicator .indicator-label').html(`<strong>${__("Subetapa")}:<\/strong> ${frm.doc['sub_workflow'] || ''}`);
+      $button.parent().find('.sub-workflow-indicator .indicator-label').html(`<strong>${__("Subetapa")}:<\/strong> ${form.doc['sub_workflow'] || ''}`);
     }
   }
 }
 
 const sub_workflow = {
-  pre_actions: async function (frm: FrappeForm) {
-    const workflow_state = frm.doc.workflow_state;
-    const sub_workflow_value = frm.doc['sub_workflow'];
-    if (!frm.doc || frm.doc.__islocal || !frm.doc.name || !frm.doc.creation || typeof frm.doc.creation !== "string" || frm.doc.creation.length === 0) {
+  pre_actions: async function (form: FrappeForm) {
+    const workflow_state = form.doc.workflow_state;
+    const sub_workflow_value = form.doc['sub_workflow'];
+    if (!form.doc || form.doc.__islocal || !form.doc.name || !form.doc.creation || typeof form.doc.creation !== "string" || form.doc.creation.length === 0) {
       return;
     }
     if (workflow_state != agt.metadata.doctype.ticket.workflow_state.draft.name && workflow_state != agt.metadata.doctype.ticket.workflow_state.active.name) {
       return;
     }
     if (sub_workflow_value !== "Service Protocol" && (sub_workflow_value === "" || sub_workflow_value === null || sub_workflow_value === undefined)) {
-      await handleServiceProtocol(frm);
+      await handleServiceProtocol(form);
     }
     if (sub_workflow_value !== "Checklist" && (sub_workflow_value === "Service Protocol")) {
-      await handleChecklist(frm);
+      await handleChecklist(form);
     }
     if (sub_workflow_value !== "Proposed Dispatch" && (sub_workflow_value === "Checklist" || sub_workflow_value === "Compliance Statement")) {
-      await handleProposedDispatch(frm);
+      await handleProposedDispatch(form);
     }
     if (sub_workflow_value !== "Compliance Statement" && (sub_workflow_value === "Proposed Dispatch" || sub_workflow_value === "Checklist")) {
-      await handleComplianceStatement(frm);
+      await handleComplianceStatement(form);
     }
-    moveFowardButton(frm); // trigger move forward button
+    moveFowardButton(form); // trigger move forward button
   }
 };
 export { sub_workflow };

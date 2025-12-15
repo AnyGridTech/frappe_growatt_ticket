@@ -4,6 +4,9 @@ import { SerialNo, ServiceProtocol, Ticket } from "@anygridtech/frappe-agt-types
 import type { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
 import { ticket_utils } from "./Utils";
 import { sub_workflow } from "./SubWorkflow";
+import "./Setup";
+
+declare var frappe_growatt_ticket: any;
 
 /*
 * This file handles the form events for the Ticket doctype.
@@ -11,54 +14,55 @@ import { sub_workflow } from "./SubWorkflow";
 */
 
 frappe.ui.form.on("Ticket", {
-  setup: async (frm: FrappeForm<Ticket>) => {
-    if (frm.doc.main_eqp_serial_no) {
-      agt.utils.validate_serial_number(frm.doc.main_eqp_serial_no, "inverter");
+  setup: async (form: FrappeForm<Ticket>) => {
+    if (form.doc.main_eqp_serial_no) {
+      agt.utils.validate_serial_number(form.doc.main_eqp_serial_no);
     }
-    await agt.setup.run();
-    ticket_utils.fields_listener(frm);
+    // await agt.setup.run();
+    await frappe_growatt_ticket.setup.run(form);
+    ticket_utils.fields_listener(form);
   },
-  before_save: async (frm: FrappeForm<Ticket>) => {
-    if (!frm.doc?.main_eqp_serial_no) {
+  before_save: async (form: FrappeForm<Ticket>) => {
+    if (!form.doc?.main_eqp_serial_no) {
       frappe.throw(__(`Número de série requerido.`));
-    } else if (!agt.growatt.sn_regex.test(frm.doc?.main_eqp_serial_no)) {
+    } else if (!agt.utils.validate_serial_number(form.doc?.main_eqp_serial_no)) {
       frappe.throw(__(`Número de série inválido.`));
     }
-    await ticket_utils.share_doc_trigger(frm);
+    await ticket_utils.share_doc_trigger(form);
   },
   after_save: async () => {
     await ticket_utils.update_related_forms();
   },
-  onload: async (frm: FrappeForm<Ticket>) => {
+  onload: async (form: FrappeForm<Ticket>) => {
     frappe.tooltip.showUserTips({
-      form: frm,
+      form: form,
       doctype: 'Tooltip',
       docnames: ['1', '1']
     });
-    ticket_utils.fields_listener(frm);
-    ticket_utils.runSync(frm);
-    await ticket_utils.set_service_partner(frm);
-    await ticket_utils.trigger_create_sn_into_db(frm);
-    await sub_workflow.pre_actions(frm);
-    if (frm.doc.__islocal) {
-      frm.set_df_property("main_eqp_serial_no", 'read_only', 0);
+    ticket_utils.fields_listener(form);
+    ticket_utils.runSync(form);
+    await ticket_utils.set_service_partner(form);
+    await ticket_utils.trigger_create_sn_into_db(form);
+    await sub_workflow.pre_actions(form);
+    if (form.doc.__islocal) {
+      form.set_df_property("main_eqp_serial_no", 'read_only', 0);
     }
   },
-  refresh: async (frm: FrappeForm<Ticket>) => {
-    ticket_utils.runSync(frm);
-    ticket_utils.fields_listener(frm);
-    await ticket_utils.set_service_partner(frm);
-    await ticket_utils.trigger_create_sn_into_db(frm);
-    await sub_workflow.pre_actions(frm);
+  refresh: async (form: FrappeForm<Ticket>) => {
+    ticket_utils.runSync(form);
+    ticket_utils.fields_listener(form);
+    await ticket_utils.set_service_partner(form);
+    await ticket_utils.trigger_create_sn_into_db(form);
+    await sub_workflow.pre_actions(form);
   },
-  before_load: async (frm: FrappeForm<Ticket>) => {
-    // await ticket_utils.set_service_partner(frm);
-    ticket_utils.fields_listener(frm);
+  before_load: async (form: FrappeForm<Ticket>) => {
+    // await ticket_utils.set_service_partner(form);
+    ticket_utils.fields_listener(form);
   },
-  validate: async (frm: FrappeForm<Ticket>) => {
-    ticket_utils.fields_listener(frm);
-    if (!frm.doc.__islocal) return;
-    const main_eqp_serial_no = frm.doc.main_eqp_serial_no;
+  validate: async (form: FrappeForm<Ticket>) => {
+    ticket_utils.fields_listener(form);
+    if (!form.doc.__islocal) return;
+    const main_eqp_serial_no = form.doc.main_eqp_serial_no;
     if (!main_eqp_serial_no) return;
     const serial_no = await frappe.db
       .get_value<SerialNo>('Serial No', { serial_no: main_eqp_serial_no }, ['serial_no', 'item_code', 'warehouse', 'company', 'status'])

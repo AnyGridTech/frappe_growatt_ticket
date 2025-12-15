@@ -193,7 +193,7 @@ const ticket_utils = {
   GetServPartnerCompanies: async function (name?: string) {
     return await frappe.db.get_list<Company>('Company', {
       filters: {
-        custom_service_partner: 1,
+        service_partner: 1,
         name
       },
       fields: ['name', 'abbr', 'is_group']
