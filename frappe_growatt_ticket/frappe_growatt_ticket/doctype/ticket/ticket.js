@@ -12,7 +12,7 @@
       const wcs = agt.utils.table.row.find(cur_frm, "checklist_table_smart_meter", { or: { docstatus: [0] } });
       const wcem = agt.utils.table.row.find(cur_frm, "checklist_table_smart_energy_manager", { or: { docstatus: [0] } });
       const wcd = agt.utils.table.row.find(cur_frm, "checklist_table_datalogger", { or: { docstatus: [0] } });
-      const wsp = agt.utils.table.row.find(cur_frm, "checklist_table_service_protocol", { or: { docstatus: [0] } });
+      const wsp = agt.utils.table.row.find(cur_frm, "checklist_table_initial_analysis", { or: { docstatus: [0] } });
       const clean_dict = Object.entries(fields_record).filter(([_, v]) => v.value !== void 0).reduce((acc, [k, v]) => {
         acc[k] = v.value;
         return acc;
@@ -43,8 +43,8 @@
         await agt.utils.doc.share_doc("Service Protocol Datalogger Checklist", row.checklist_docname, shared_users);
       });
       wsp?.forEach(async (row) => {
-        await agt.utils.doc.update_doc("Service Protocol", row.checklist_docname, clean_dict);
-        await agt.utils.doc.share_doc("Service Protocol", row.checklist_docname, shared_users);
+        await agt.utils.doc.update_doc("Initial Analysis", row.checklist_docname, clean_dict);
+        await agt.utils.doc.share_doc("Initial Analysis", row.checklist_docname, shared_users);
       });
     },
     fields_listener(frm) {
@@ -83,17 +83,17 @@
       if (frm.doc.__islocal) return;
       const serial_no = frm.doc.main_eqp_serial_no;
       if (!serial_no) {
-        console.error("N\xFAmero de s\xE9rie n\xE3o fornecido");
+        console.error("Serial number not provided");
         return;
       }
       const db_sn = await frappe.db.get_value("Serial No", serial_no, ["serial_no", "item_code", "warehouse", "company", "status", "workflow_state"]).catch((e) => {
-        console.error("Erro ao buscar n\xFAmero de s\xE9rie:", e);
+        console.error("Error fetching serial number:", e);
         return null;
       }).then((r) => r?.message);
       const hasKeys = (obj) => obj && typeof obj === "object" && Object.keys(obj).length > 0;
       const service_partner_company = frm.doc.service_partner_company;
       if (!service_partner_company) {
-        console.error("Empresa parceira de servi\xE7o n\xE3o definida");
+        console.error("Service partner company not defined");
         return;
       }
       if (db_sn && hasKeys(db_sn)) {
@@ -126,7 +126,7 @@
           serialNoFields["company"] = { value: service_partner_company };
           serialNoFields["status"] = { value: "Active" };
           console.log("Fields for Serial No creation:", JSON.stringify(serialNoFields));
-          const sn_docname = await agt.utils.doc.create_doc("Serial No", { docname: "ticket_docname" }, serialNoFields);
+          const sn_docname = await agt.utils.doc.create_doc("Serial No", {}, serialNoFields);
           if (!sn_docname) {
             throw new Error("Failed to create Serial No - no document name returned");
           }
@@ -189,7 +189,7 @@
       if (frm.doc.__islocal) return;
       const doctypes = [
         "Ticket",
-        "Service Protocol",
+        "Initial Analysis",
         "Service Protocol Inverter Checklist",
         "Service Protocol EV Charger Checklist",
         "Service Protocol Battery Checklist",
@@ -292,7 +292,7 @@
           const doctype = $el.attr("data-doctype");
           const docname = $el.attr("data-docname");
           if (!doctype || !docname) return;
-          frappe.iframe_view._open_doc_modal(doctype, docname);
+          frappe.iframe.view._open_doc_modal(doctype, docname);
         });
       }
     }
@@ -303,16 +303,16 @@
   frappe.ui.form.on("Ticket", {
     add_child_button: async (form) => {
       if (!form.doc.name || form.doc.__islocal) {
-        frappe.msgprint(__("Por favor, salve este documento antes de adicionar um ticket filho."));
+        frappe.msgprint(__("Please save this document before adding a child ticket."));
         return;
       }
       const allowRoles = frappe.user.has_role(["Standard Employee"]);
       if (!allowRoles) {
-        frappe.msgprint(__("Voc\xEA n\xE3o tem permiss\xE3o para criar um ticket filho. Contate o administrador do sistema."));
+        frappe.msgprint(__("You do not have permission to create a child ticket. Please contact the system administrator."));
         return;
       }
       const confirmDiag = frappe.confirm(
-        "Tem certeza que deseja criar um novo ticket filho?",
+        __("Are you sure you want to create a new child ticket?"),
         () => {
           frappe.new_doc("Ticket", {
             ticket_docname: form.doc.name
@@ -323,9 +323,9 @@
           return;
         }
       );
-      confirmDiag.set_primary_action("Sim");
-      confirmDiag.set_secondary_action_label("N\xE3o");
-      if (confirmDiag.set_title) confirmDiag.set_title("Confirma\xE7\xE3o");
+      confirmDiag.set_primary_action(__("Yes"));
+      confirmDiag.set_secondary_action_label(__("No"));
+      if (confirmDiag.set_title) confirmDiag.set_title(__("Confirmation"));
     },
     main_eqp_error_version: async (form) => {
       const date = form.doc.ext_fault_date;
@@ -398,7 +398,7 @@
               reqd: true
             }
           ],
-          primary_action_label: "Selecionar",
+          primary_action_label: "Select",
           primary_action: async function(values) {
             const mppt = values["mppt"];
             if (!mppt) return;
@@ -415,13 +415,13 @@
       const sn2 = await agt.utils.get_growatt_sn_info(serial_no);
       if (!sn2 || !sn2.data || !sn2.data.model) {
         unsetFields(form);
-        const dialog_title = "Selecione o modelo do inversor";
+        const dialog_title = "Select the equipment model";
         agt.utils.dialog.load({
           title: dialog_title,
           fields: [
             {
               fieldname: "item_code",
-              label: "Modelos Disponiveis",
+              label: "Select Model",
               fieldtype: "Link",
               options: "Item",
               get_query: function() {
@@ -435,7 +435,7 @@
               reqd: true
             }
           ],
-          primary_action_label: "Selecionar",
+          primary_action_label: "Select",
           primary_action: async function(values) {
             const model = values["item_code"];
             if (!model) return;
@@ -484,24 +484,24 @@
     { group: "Datalogger", doctype: "Service Protocol Datalogger Checklist", table_field: "child_tracker_table" }
   ];
   var subWorkflowList = {
-    "Service Protocol": ["Checklist", "Proposed Dispatch"],
+    "Initial Analysis": ["Checklist", "Proposed Dispatch"],
     "Checklist": ["Compliance Statement", "Proposed Dispatch"],
     "Proposed Dispatch": ["Compliance Statement"],
     "Compliance Statement": ["Logistics"]
   };
-  async function handleServiceProtocol(form) {
-    const dt_name = "Service Protocol";
+  async function handleInitialAnalysis(form) {
+    const dt_name = "Initial Analysis";
     const fieldname = "child_tracker_table";
     if (form._subworkflow_creating) return;
     form._subworkflow_creating = true;
     try {
-      const existingServiceProtocols = await frappe.db.get_list(dt_name, {
+      const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
         filters: { ticket_docname: form.doc.name },
         fields: ["name"]
       });
-      if (existingServiceProtocols && existingServiceProtocols.length > 0) {
-        const existing_list_html = existingServiceProtocols.map((sp) => `<li>${sp.name}</li>`).join("");
-        console.warn(`J\xE1 existe um ${dt_name} vinculado a este Ticket: <br><ul>${existing_list_html}</ul>`);
+      if (existingInitialAnalysis && existingInitialAnalysis.length > 0) {
+        const existing_list_html = existingInitialAnalysis.map((sp) => `<li>${sp.name}</li>`).join("");
+        console.warn(`Already exists a ${dt_name} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
         return;
       }
       const freshProtocols = await frappe.db.get_list(dt_name, {
@@ -509,7 +509,7 @@
         fields: ["name"]
       });
       if (freshProtocols && freshProtocols.length > 0) return;
-      const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, form.fields_dict);
+      const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, form.fields_dict);
       if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
       const checklist_doc = await frappe.db.get_value(dt_name, docname, ["workflow_state"]);
       const workflow_state = checklist_doc?.message?.workflow_state || "Draft";
@@ -518,18 +518,30 @@
         child_tracker_doctype: dt_name,
         child_tracker_workflow_state: workflow_state
       });
-      await form.set_value("sub_workflow", "Service Protocol");
-      form.doc["sub_workflow"] = "Service Protocol";
+      await form.set_value("sub_workflow", "Initial Analysis");
+      form.doc["sub_workflow"] = "Initial Analysis";
       form.dirty();
       await form.save();
     } finally {
       form._subworkflow_creating = false;
     }
   }
+  async function recoverInitialAnalysisSoftLock(form) {
+    const dt_name = "Initial Analysis";
+    const sub_workflow_value = form.doc["sub_workflow"];
+    if (sub_workflow_value !== "Initial Analysis") return;
+    const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
+      filters: { ticket_docname: form.doc.name },
+      fields: ["name"]
+    });
+    if (existingInitialAnalysis && existingInitialAnalysis.length > 0) return;
+    console.warn(`\u26A0\uFE0F Soft lock detected: sub_workflow is in 'Initial Analysis' but there is no Initial Analysis linked. Creating automatically...`);
+    await handleInitialAnalysis(form);
+  }
   async function handleChecklist(form) {
     const main_eqp_group = form.doc["main_eqp_group"];
     const pair = subWorkflowChecklistConfig.find((c) => c.group === main_eqp_group);
-    if (!pair) throw new Error(`Grupo do equipamento n\xE3o \xE9 '${main_eqp_group}'`);
+    if (!pair) throw new Error(`Equipment group is not '${main_eqp_group}'`);
     const [doctype, fieldname] = [pair.doctype, pair.table_field];
     if (form._subworkflow_creating) return;
     form._subworkflow_creating = true;
@@ -537,11 +549,11 @@
       const trackerRows = form.doc[fieldname];
       if (trackerRows?.length) {
         const not_rejected = trackerRows.filter(
-          (cit) => cit.child_tracker_workflow_state !== agt.metadata.doctype.service_protocol.workflow_state.rejected.name && cit.child_tracker_doctype === doctype
+          (cit) => cit.child_tracker_workflow_state !== agt.metadata.doctype.initial_analysis.workflow_state.rejected.name && cit.child_tracker_doctype === doctype
         );
         if (not_rejected?.length) {
-          const available_list_html = not_rejected.map((cit) => `<li> ${cit.child_tracker_docname || cit.name || "Sem nome"} </li>`).join("");
-          console.warn(`J\xE1 existe um ${doctype} vinculado a este Ticket: <br><ul>${available_list_html}</ul>`);
+          const available_list_html = not_rejected.map((cit) => `<li> ${cit.child_tracker_docname || cit.name || "No name"} </li>`).join("");
+          console.warn(`Already exists a ${doctype} linked to this Ticket: <br><ul>${available_list_html}</ul>`);
           await form.set_value("sub_workflow", "Checklist");
           form.doc["sub_workflow"] = "Checklist";
           form.dirty();
@@ -551,6 +563,19 @@
       }
       const freshRows = form.doc[fieldname];
       if (freshRows?.some((cit) => cit.child_tracker_doctype === doctype)) return;
+      const docname = await agt.utils.doc.create_doc(doctype, { ticket_docname: "docname" }, form.fields_dict);
+      if (!docname) throw new Error(`Failed to create ${doctype}`);
+      const checklist_doc = await frappe.db.get_value(doctype, docname, ["workflow_state"]);
+      const workflow_state = checklist_doc?.message?.workflow_state || "Draft";
+      await agt.utils.table.row.add_one(form, fieldname, {
+        child_tracker_docname: docname,
+        child_tracker_doctype: doctype,
+        child_tracker_workflow_state: workflow_state
+      });
+      await form.set_value("sub_workflow", "Checklist");
+      form.doc["sub_workflow"] = "Checklist";
+      form.dirty();
+      await form.save();
     } finally {
       form._subworkflow_creating = false;
     }
@@ -568,10 +593,10 @@
       const checklist_fieldname = pair.table_field;
       const trackerRows = form.doc[checklist_fieldname];
       const completedChecklist = trackerRows?.find(
-        (cit) => cit.child_tracker_doctype === checklist_doctype && (cit.child_tracker_workflow_state === agt.metadata.doctype.service_protocol.workflow_state.finished.name || cit.child_tracker_workflow_state === "Conclu\xEDdo")
+        (cit) => cit.child_tracker_doctype === checklist_doctype && (cit.child_tracker_workflow_state === agt.metadata.doctype.initial_analysis.workflow_state.finished.name || cit.child_tracker_workflow_state === "Conclu\xEDdo")
       );
       if (!completedChecklist) {
-        console.warn(`N\xE3o existe Checklist do tipo '${checklist_doctype}' com status 'Conclu\xEDdo' para este Ticket. Proposed Dispatch n\xE3o ser\xE1 criado.`);
+        console.warn(`There is no Checklist of type '${checklist_doctype}' with status 'Completed' for this Ticket. Proposed Dispatch will not be created.`);
         return;
       }
       const existingPD = await frappe.db.get_list(dt_name, {
@@ -580,7 +605,7 @@
       });
       if (existingPD && existingPD.length > 0) {
         const existing_list_html = existingPD.map((sp) => `<li>${sp.name}</li>`).join("");
-        console.warn(`J\xE1 existe um ${dt_name} vinculado a este Ticket: <br><ul>${existing_list_html}</ul>`);
+        console.warn(`Already exists a ${dt_name} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
         return;
       }
       const freshPD = await frappe.db.get_list(dt_name, {
@@ -588,8 +613,8 @@
         fields: ["name"]
       });
       if (freshPD && freshPD.length > 0) return;
-      const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, form.fields_dict);
-      if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
+      const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, form.fields_dict);
+      if (!docname) throw new Error(`Failed to create ${dt_name}`);
       const pd_doc = await frappe.db.get_value(dt_name, docname, ["workflow_state"]);
       const workflow_state = pd_doc?.message?.workflow_state || "Draft";
       await agt.utils.table.row.add_one(form, fieldname, {
@@ -618,10 +643,10 @@
       const checklist_fieldname = pair.table_field;
       const trackerRows = form.doc[checklist_fieldname];
       const completedChecklist = trackerRows?.find(
-        (cit) => cit.child_tracker_doctype === checklist_doctype && (cit.child_tracker_workflow_state === agt.metadata.doctype.service_protocol.workflow_state.finished.name || cit.child_tracker_workflow_state === "Conclu\xEDdo")
+        (cit) => cit.child_tracker_doctype === checklist_doctype && (cit.child_tracker_workflow_state === agt.metadata.doctype.initial_analysis.workflow_state.finished.name || cit.child_tracker_workflow_state === "Conclu\xEDdo")
       );
       if (!completedChecklist) {
-        console.warn(`N\xE3o existe Checklist do tipo '${checklist_doctype}' com status 'Conclu\xEDdo' para este Ticket. Compliance Statement n\xE3o ser\xE1 criado.`);
+        console.warn(`There is no Checklist of type '${checklist_doctype}' with status 'Completed' for this Ticket. Compliance Statement will not be created.`);
         return;
       }
       const existingComplianceStatement = await frappe.db.get_list(dt_name, {
@@ -630,7 +655,7 @@
       });
       if (existingComplianceStatement && existingComplianceStatement.length > 0) {
         const existing_list_html = existingComplianceStatement.map((sp) => `<li>${sp.name}</li>`).join("");
-        console.warn(`J\xE1 existe um ${dt_name} vinculado a este Ticket: <br><ul>${existing_list_html}</ul>`);
+        console.warn(`Already exists a ${dt_name} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
         return;
       }
       const freshCompliance = await frappe.db.get_list(dt_name, {
@@ -638,7 +663,7 @@
         fields: ["name"]
       });
       if (freshCompliance && freshCompliance.length > 0) return;
-      const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, form.fields_dict);
+      const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, form.fields_dict);
       if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
       const checklist_doc = await frappe.db.get_value(dt_name, docname, ["workflow_state"]);
       const workflow_state = checklist_doc?.message?.workflow_state || "Draft";
@@ -658,23 +683,23 @@
   var subWorkflowValidators = {
     "Checklist": async (form) => {
       const trackerRows = form.doc["child_tracker_table"];
-      const hasServiceProtocol = trackerRows?.some((row) => row.child_tracker_doctype === "Service Protocol");
-      if (!hasServiceProtocol) return "\xC9 necess\xE1rio criar o Service Protocol antes de avan\xE7ar para Checklist.";
+      const hasInitialAnalysis = trackerRows?.some((row) => row.child_tracker_doctype === "Initial Analysis");
+      if (!hasInitialAnalysis) return "It is necessary to create the Initial Analysis before advancing to Checklist.";
       return null;
     },
     "Compliance Statement": async (form) => {
       const main_eqp_group = form.doc["main_eqp_group"];
       const pair = subWorkflowChecklistConfig.find((c) => c.group === main_eqp_group);
-      if (!pair) return `Grupo do equipamento n\xE3o \xE9 '${main_eqp_group}'`;
+      if (!pair) return `Equipment group is not '${main_eqp_group}'`;
       const checklist_doctype = pair.doctype;
       const trackerRows = form.doc[pair.table_field];
       const completedChecklist = trackerRows?.find(
-        (cit) => cit.child_tracker_doctype === checklist_doctype && (cit.child_tracker_workflow_state === agt.metadata.doctype.service_protocol.workflow_state.finished.name || cit.child_tracker_workflow_state === "Conclu\xEDdo")
+        (cit) => cit.child_tracker_doctype === checklist_doctype && (cit.child_tracker_workflow_state === agt.metadata.doctype.initial_analysis.workflow_state.finished.name || cit.child_tracker_workflow_state === "Conclu\xEDdo")
       );
-      if (!completedChecklist) return `Checklist do tipo '${checklist_doctype}' precisa estar conclu\xEDdo para avan\xE7ar para Compliance Statement.`;
+      if (!completedChecklist) return `Checklist of type '${checklist_doctype}' needs to be completed to advance to Compliance Statement.`;
       return null;
     }
-    // Adicione outras validações conforme necessário
+    // Add other validations as needed
   };
   function moveFowardButton(form) {
     if (!frappe.boot.user.roles.includes("System Manager")) return;
@@ -682,43 +707,49 @@
       const current = form.doc["sub_workflow"];
       const nextSteps = subWorkflowList[current] || [];
       if (!nextSteps.length) {
-        frappe.msgprint(__("N\xE3o h\xE1 pr\xF3ximas etapas dispon\xEDveis."));
+        frappe.msgprint(__("No next steps available."));
         return;
       }
+      const dialogTitle = __("Advance substep");
       agt.utils.dialog.load({
-        title: __("Avan\xE7ar subetapa"),
+        title: dialogTitle,
         fields: [
           {
             fieldname: "next_status",
-            label: __("Pr\xF3xima subetapa"),
+            label: __("Next substep"),
             fieldtype: "Select",
             options: nextSteps.join("\n"),
             reqd: true
           }
         ],
-        primary_action_label: __("Avan\xE7ar"),
+        primary_action_label: __("Advance"),
         primary_action: async (values) => {
           const status = values.next_status;
           if (subWorkflowValidators[status]) {
             const errorMsg = await subWorkflowValidators[status](form);
             if (errorMsg) {
               frappe.msgprint({
-                title: __("Crit\xE9rio n\xE3o atendido"),
+                title: __("Criteria not met"),
                 message: errorMsg,
                 indicator: "red"
               });
+              agt.utils.dialog.close_by_title(dialogTitle);
               return;
             }
           }
           frappe.confirm(
-            __("Confirmar criar\xE1 um doctype do tipo <b>" + status + "</b> e essa a\xE7\xE3o \xE9 irrevers\xEDvel. Deseja seguir?"),
+            __("Confirming will create a doctype of type <b>" + status + "</b> and this action is irreversible. Do you want to proceed?"),
             async () => {
               await form.set_value("sub_workflow", status);
               form.doc["sub_workflow"] = status;
-              frappe.msgprint(__("Subetapa avan\xE7ada para: " + status));
+              form.dirty();
+              await form.save();
+              frappe.msgprint(__("Substep advanced to: " + status));
+              agt.utils.dialog.close_by_title(dialogTitle);
             },
             () => {
-              frappe.msgprint(__("A\xE7\xE3o cancelada."));
+              frappe.msgprint(__("Action cancelled."));
+              agt.utils.dialog.close_by_title(dialogTitle);
             }
           );
         }
@@ -731,12 +762,12 @@
       if ($button.parent().find(".sub-workflow-indicator").length === 0) {
         const $pill = $(`
         <span class="indicator-pill red sub-workflow-indicator" style="margin-right: 6px; vertical-align: middle;">
-          <span class="indicator-label">${__("Subetapa")}: ${form.doc["sub_workflow"] || ""}</span>
+          <span class="indicator-label">${__("Substep")}: ${form.doc["sub_workflow"] || ""}</span>
         </span>
       `);
         $button.before($pill);
       } else {
-        $button.parent().find(".sub-workflow-indicator .indicator-label").html(`<strong>${__("Subetapa")}:</strong> ${form.doc["sub_workflow"] || ""}`);
+        $button.parent().find(".sub-workflow-indicator .indicator-label").html(`<strong>${__("Substep")}:</strong> ${form.doc["sub_workflow"] || ""}`);
       }
     }
   }
@@ -750,10 +781,11 @@
       if (workflow_state != agt.metadata.doctype.ticket.workflow_state.draft.name && workflow_state != agt.metadata.doctype.ticket.workflow_state.active.name) {
         return;
       }
-      if (sub_workflow_value !== "Service Protocol" && (sub_workflow_value === "" || sub_workflow_value === null || sub_workflow_value === void 0)) {
-        await handleServiceProtocol(form);
+      await recoverInitialAnalysisSoftLock(form);
+      if (sub_workflow_value !== "Initial Analysis" && (sub_workflow_value === "" || sub_workflow_value === null || sub_workflow_value === void 0)) {
+        await handleInitialAnalysis(form);
       }
-      if (sub_workflow_value !== "Checklist" && sub_workflow_value === "Service Protocol") {
+      if (sub_workflow_value !== "Checklist" && sub_workflow_value === "Initial Analysis") {
         await handleChecklist(form);
       }
       if (sub_workflow_value !== "Proposed Dispatch" && (sub_workflow_value === "Checklist" || sub_workflow_value === "Compliance Statement")) {
@@ -803,9 +835,9 @@
     },
     before_save: async (form) => {
       if (!form.doc?.main_eqp_serial_no) {
-        frappe.throw(__(`N\xFAmero de s\xE9rie requerido.`));
+        frappe.throw(__("Serial number required."));
       } else if (!agt.utils.validate_serial_number(form.doc?.main_eqp_serial_no)) {
-        frappe.throw(__(`N\xFAmero de s\xE9rie inv\xE1lido.`));
+        frappe.throw(__("Invalid serial number."));
       }
       await ticket_utils.share_doc_trigger(form);
     },
@@ -844,14 +876,14 @@
       if (!main_eqp_serial_no) return;
       const serial_no = await frappe.db.get_value("Serial No", { serial_no: main_eqp_serial_no }, ["serial_no", "item_code", "warehouse", "company", "status"]).catch((e) => console.error(e)).then((r) => r?.message);
       if (serial_no) {
-        const service_protocols = await frappe.db.get_list("Ticket", {
+        const initial_analysis = await frappe.db.get_list("Ticket", {
           filters: { main_eqp_serial_no },
           fields: ["name", "docstatus"]
         }).catch((e) => console.error(e));
-        if (service_protocols && service_protocols.length > 0) {
-          for (let sp of service_protocols) {
+        if (initial_analysis && initial_analysis.length > 0) {
+          for (let sp of initial_analysis) {
             if (sp.docstatus === 0) {
-              frappe.throw(__(`N\xFAmero de s\xE9rie j\xE1 possui um ticket ativo: ${sp.name}`));
+              frappe.throw(__(` Serial number already has an active ticket: ${sp.name}`));
               return;
             }
           }
@@ -875,26 +907,26 @@
       const ws = frm.doc.workflow_state;
       const state = agt.metadata.doctype.ticket.workflow_state.draft.name;
       const action = agt.metadata.doctype.ticket.workflow_action.approve.name;
-      const dt_name = "Service Protocol";
+      const dt_name = "Initial Analysis";
       const fieldname = "child_tracker_table";
       if (ws !== state || swa !== action)
-        throw new Error(`Falha ao avan\xE7ar workflow! O estado do workflow deve ser '${state}' e a a\xE7\xE3o selecionada deve ser '${action}'.`);
-      const existingServiceProtocols = await frappe.db.get_list(dt_name, {
+        throw new Error(`Failed to advance workflow! The workflow state must be '${state}' and the selected action must be '${action}'.`);
+      const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
         filters: { ticket_docname: frm.doc.name },
         fields: ["name"],
         limit: 1
       });
-      if (existingServiceProtocols && existingServiceProtocols.length > 0) {
-        const existing_list_html = existingServiceProtocols.map((sp) => `<li>${sp.name}</li>`).join("");
-        throw new Error(`J\xE1 existe um ${dt_name} vinculado a este Ticket: <br><ul>${existing_list_html}</ul>`);
+      if (existingInitialAnalysis && existingInitialAnalysis.length > 0) {
+        const existing_list_html = existingInitialAnalysis.map((sp) => `<li>${sp.name}</li>`).join("");
+        throw new Error(`A ${dt_name} is already linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
       }
       try {
         console.log(`Creating ${dt_name} for Ticket ${frm.doc.name}`);
-        const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, frm.fields_dict);
+        const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, frm.fields_dict);
         if (!docname) {
-          throw new Error(`Falha ao criar ${dt_name}`);
+          throw new Error(`Failed to create ${dt_name}`);
         }
-        console.log(`Service Protocol created successfully: ${docname}`);
+        console.log(`Initial Analysis created successfully: ${docname}`);
         console.log(`Fetching workflow state for ${docname}`);
         const checklist_doc = await frappe.db.get_value(dt_name, docname, ["workflow_state"]);
         const workflow_state = checklist_doc?.message?.workflow_state || "Draft";
@@ -918,28 +950,28 @@
     create_checklist: async (frm) => {
       const swa = frm.states.frm.selected_workflow_action;
       const ws = frm.doc.workflow_state;
-      const swa_request_checklist = agt.metadata.doctype.service_protocol.workflow_action.request_checklist.name;
-      const ws_holding_action = agt.metadata.doctype.service_protocol.workflow_state.holding_action.name;
+      const swa_request_checklist = agt.metadata.doctype.initial_analysis.workflow_action.request_checklist.name;
+      const ws_holding_action = agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name;
       if (ws !== ws_holding_action || ws === void 0 || ws === "" || ws === null || swa !== swa_request_checklist || swa === void 0 || swa === "" || swa === null) {
-        throw new Error(`N\xE3o foi poss\xEDvel criar checklist: crit\xE9rios do workflow n\xE3o atendidos.`);
+        throw new Error(`Unable to create checklist: workflow criteria not met.`);
       }
       const main_eqp_group = frm.doc["main_eqp_group"];
       const pair = preActionsChecklistConfig.find((c) => c.group === main_eqp_group);
-      if (!pair) throw new Error(`Grupo do equipamento n\xE3o \xE9 '${main_eqp_group}'`);
+      if (!pair) throw new Error(`Equipment group is not '${main_eqp_group}'`);
       const [doctype, fieldname] = [pair.doctype, pair.table_field];
       const trackerRows = frm.doc[fieldname];
       if (trackerRows?.length) {
         const not_rejected = trackerRows.filter(
-          (cit) => cit.child_tracker_workflow_state !== agt.metadata.doctype.service_protocol.workflow_state.rejected.name && cit.child_tracker_doctype === doctype
+          (cit) => cit.child_tracker_workflow_state !== agt.metadata.doctype.initial_analysis.workflow_state.rejected.name && cit.child_tracker_doctype === doctype
         );
         if (not_rejected?.length) {
-          const available_list_html = not_rejected.map((cit) => `<li> ${cit.child_tracker_docname || cit.name || "Sem nome"} </li>`).join("");
-          throw new Error(`J\xE1 existe um ou mais checklists abertos para esse protocolo: <br><ul>${available_list_html}</ul>`);
+          const available_list_html = not_rejected.map((cit) => `<li> ${cit.child_tracker_docname || cit.name || "No name"} </li>`).join("");
+          throw new Error(`There are already one or more open checklists for this protocol: <br><ul>${available_list_html}</ul>`);
         }
       }
       try {
-        console.log(`Criando checklist para ${doctype}`);
-        const docname = await agt.utils.doc.create_doc(doctype, { docname: "ticket_docname" }, frm.fields_dict);
+        console.log(`Creating checklist for ${doctype}`);
+        const docname = await agt.utils.doc.create_doc(doctype, { ticket_docname: "docname" }, frm.fields_dict);
         if (!docname) {
           throw new Error(`Falha ao criar checklist '${doctype}'`);
         }
@@ -965,18 +997,18 @@
   };
   var wp = {
     ["Solicitar An\xE1lise"]: {
-      "Create Service Protocol": createPreAnalysis.create_pre_analysis
+      "Create Initial Analysis": createPreAnalysis.create_pre_analysis
     },
-    // [agt.metadata.doctype.service_protocol.workflow_action.forward_to_support.name]: {
+    // [agt.metadata.doctype.initial_analysis.workflow_action.forward_to_support.name]: {
     //   "Decide Service Partner": preactionFowardToSupport.check_service_partner,
     // },
-    [agt.metadata.doctype.service_protocol.workflow_action.request_checklist.name]: {
+    [agt.metadata.doctype.initial_analysis.workflow_action.request_checklist.name]: {
       "Create 'Checklist'": preactionTechnicalAnalysis.create_checklist
     }
-    // [agt.metadata.doctype.service_protocol.workflow_action.finish_service.name]: {
+    // [agt.metadata.doctype.initial_analysis.workflow_action.finish_service.name]: {
     //   "Finish Protocol": preactionFinish.trigger_finish
     // },
-    // [agt.metadata.doctype.service_protocol.workflow_action.request_documentation.name]: {
+    // [agt.metadata.doctype.initial_analysis.workflow_action.request_documentation.name]: {
     //   "Create 'Compliance Statement'": preactionRequestDoc.create_compliance_statement
     // }
   };

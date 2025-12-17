@@ -7,16 +7,16 @@ let prev_main_eqp_serial_no = '';
 frappe.ui.form.on("Ticket", {
   add_child_button: async (form: FrappeForm<Ticket>) => {
     if (!form.doc.name || form.doc.__islocal) {
-      frappe.msgprint(__("Por favor, salve este documento antes de adicionar um ticket filho."));
+      frappe.msgprint(__("Please save this document before adding a child ticket."));
       return;
     }
     const allowRoles = frappe.user.has_role(['Standard Employee']);
     if (!allowRoles) {
-      frappe.msgprint(__("Você não tem permissão para criar um ticket filho. Contate o administrador do sistema."));
+      frappe.msgprint(__("You do not have permission to create a child ticket. Please contact the system administrator."));
       return;
     }
     const confirmDiag = frappe.confirm(
-      "Tem certeza que deseja criar um novo ticket filho?",
+      __("Are you sure you want to create a new child ticket?"),
       () => {
         frappe.new_doc("Ticket", {
           ticket_docname: form.doc.name
@@ -27,9 +27,9 @@ frappe.ui.form.on("Ticket", {
         return;
       }
     );
-    confirmDiag.set_primary_action("Sim");
-    confirmDiag.set_secondary_action_label("Não");
-    if (confirmDiag.set_title) confirmDiag.set_title("Confirmação");
+    confirmDiag.set_primary_action(__("Yes"));
+    confirmDiag.set_secondary_action_label(__("No"));
+    if (confirmDiag.set_title) confirmDiag.set_title(__("Confirmation"));
   },
   main_eqp_error_version: async (form: FrappeForm<Ticket>) => {
     const date = form.doc.ext_fault_date;
@@ -115,7 +115,7 @@ frappe.ui.form.on("Ticket", {
             reqd: true
           }
         ],
-        primary_action_label: "Selecionar",
+        primary_action_label: "Select",
         primary_action: async function (values) {
           const mppt = values['mppt'];
           if (!mppt) return;
@@ -132,13 +132,13 @@ frappe.ui.form.on("Ticket", {
     const sn2 = await agt.utils.get_growatt_sn_info(serial_no);
     if (!sn2 || !sn2.data || !sn2.data.model) {
       unsetFields(form);
-      const dialog_title = "Selecione o modelo do inversor";
+      const dialog_title = "Select the equipment model";
       agt.utils.dialog.load({
         title: dialog_title,
         fields: [
           {
             fieldname: "item_code",
-            label: "Modelos Disponiveis",
+            label: "Select Model",
             fieldtype: "Link",
             options: "Item",
             get_query: function() {
@@ -152,7 +152,7 @@ frappe.ui.form.on("Ticket", {
             reqd: true
           },
         ],
-        primary_action_label: "Selecionar",
+        primary_action_label: "Select",
         primary_action: async function (values) {
           const model = values['item_code'];
           if (!model) return;

@@ -1,0 +1,63 @@
+Translated String,Context,Original String
+Customer Information,,Informações do Cliente
+Primary Email,,Email Principal
+Full Name,,Nome Completo
+Equipment Information,,Informações do Equipamento
+Serial Number,,Número de Série
+Model Reference,,Referência do Modelo
+Model Code,,Código do Modelo
+Model,,Modelo
+Number of MPPTs,,Número de MPPTs
+Inverter Phase,,Fase do Inversor
+Type,,Tipo
+Group,,Grupo
+Family,,Familia
+Version,,Versão
+Service Partner,,Parceiro de Serviço
+Installation State,,UF da Instalação
+Distributor,,Distribuidor
+Initial Firmware,,Firmware Inicial
+Final Firmware,,Firmware Final
+Derived Documents,,Documentos Derivados
++ Create Derived,,+ Criar Derivado
+Referenced Protocol,,Protocolo Referenciado
+*<strong>Referenced</strong> with the document above. Access the link to view.,,*<strong>Referenciado</strong> com o documento acima. Acesse o link para visualizar.
+Priority,,Prioridade
+Maximum,,Máxima
+Legal Process,,Processo Judicial
+A {0} is already linked to this Ticket: <br><ul>{1}</ul>,,Já existe um {0} vinculado a este Ticket: <br><ul>{1}</ul>
+Failed to create {0},,Falha ao criar {0}
+Equipment group is not '{0}',,Grupo do equipamento não é '{0}'
+There is no Checklist of type '{0}' with status 'Completed' for this Ticket. Proposed Dispatch will not be created.,,Não existe Checklist do tipo '{0}' com status 'Concluído' para este Ticket. Proposed Dispatch não será criado.
+There is no Checklist of type '{0}' with status 'Completed' for this Ticket. Compliance Statement will not be created.,,Não existe Checklist do tipo '{0}' com status 'Concluído' para este Ticket. Compliance Statement não será criado.
+It is necessary to create the Initial Analysis before proceeding to Checklist.,,É necessário criar a Análise Inicial antes de avançar para Checklist.
+Checklist of type '{0}' needs to be completed to proceed to Compliance Statement.,,Checklist do tipo '{0}' precisa estar concluído para avançar para Compliance Statement.
+Advance Substage,,Avançar subetapa
+No next steps available.,,Não há próximas etapas disponíveis.
+Next Substage,,Próxima subetapa
+Advance,,Avançar
+Criteria Not Met,,Critério não atendido
+Confirming will create a doctype of type <b>{0}</b> and this action is irreversible. Do you want to proceed?,,Confirmar criará um doctype do tipo <b>{0}</b> e essa ação é irreversível. Deseja seguir?
+Substage advanced to: {0},,Subetapa avançada para: {0}
+Action cancelled.,,Ação cancelada.
+Please save this document before adding a child ticket.,,Por favor, salve este documento antes de adicionar um ticket filho.
+You do not have permission to create a child ticket. Please contact the system administrator.,,Você não tem permissão para criar um ticket filho. Contate o administrador do sistema.
+Are you sure you want to create a new child ticket?,,Tem certeza que deseja criar um novo ticket filho?
+Yes,,Sim
+No,,Não
+Confirmation,,Confirmação
+Serial number required.,,Número de série requerido.
+Invalid serial number.,,Número de série inválido.
+Serial number already has an active ticket: {0},,Número de série já possui um ticket ativo: {0}
+Serial number not provided,,Número de série não fornecido
+Error fetching serial number:,,Erro ao buscar número de série:
+Service partner company not defined,,Empresa parceira de serviço não definida
+Failed to advance workflow! The workflow state must be '{0}' and the selected action must be '{1}'.,,Falha ao avançar workflow! O estado do workflow deve ser '{0}' e a ação selecionada deve ser '{1}'.
+Unable to create checklist: workflow criteria not met.,,Não foi possível criar checklist: critérios do workflow não atendidos.
+No name,,Sem nome
+There are already one or more open checklists for this protocol: <br><ul>{0}</ul>,,Já existe um ou mais checklists abertos para esse protocolo: <br><ul>{0}</ul>
+Creating checklist for {0},,Criando checklist para {0}
+Completed,,Concluído
+Select,Selecione
+Select Model,Selecione o Modelo
+Select the equipment model,Selecione o modelo do equipamento

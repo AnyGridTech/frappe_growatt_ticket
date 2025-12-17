@@ -15,43 +15,43 @@ const preActionsChecklistConfig = [
 //   check_service_partner: async (frm: FrappeForm) => {
 //     const swa = frm.states.frm.selected_workflow_action;
 //     const ws = frm.doc.workflow_state;
-//     // if (ws !== growatt.namespace.service_protocol.workflow_state.customer_finish_filling.name || swa !== growatt.namespace.service_protocol.workflow_action.forward_to_support.name) return;
+//     // if (ws !== growatt.namespace.initial_analysis.workflow_state.customer_finish_filling.name || swa !== growatt.namespace.initial_analysis.workflow_action.forward_to_support.name) return;
 //   }
 // };
 
-// Create Service Protocol through the Ticket action trigger.
+// Create Initial Analysis through the Ticket action trigger.
 const createPreAnalysis = {
   create_pre_analysis: async (frm: FrappeForm) => {
     const swa = frm.states.frm.selected_workflow_action;
     const ws = frm.doc.workflow_state;
     const state = agt.metadata.doctype.ticket.workflow_state.draft.name;
     const action = agt.metadata.doctype.ticket.workflow_action.approve.name;
-    const dt_name = "Service Protocol";
+    const dt_name = "Initial Analysis";
     const fieldname = "child_tracker_table";
 
     if (ws !== state || swa !== action)
-      throw new Error(`Falha ao avançar workflow! O estado do workflow deve ser '${state}' e a ação selecionada deve ser '${action}'.`);
+      throw new Error(`Failed to advance workflow! The workflow state must be '${state}' and the selected action must be '${action}'.`);
 
-    const existingServiceProtocols = await frappe.db.get_list(dt_name, {
+    const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
       filters: { ticket_docname: frm.doc.name },
       fields: ['name'],
       limit: 1
     });
-    if (existingServiceProtocols && existingServiceProtocols.length > 0) {
-      const existing_list_html = existingServiceProtocols.map(sp => `<li>${sp.name}</li>`).join("");
-      throw new Error(`Já existe um ${dt_name} vinculado a este Ticket: <br><ul>${existing_list_html}</ul>`);
+    if (existingInitialAnalysis && existingInitialAnalysis.length > 0) {
+      const existing_list_html = existingInitialAnalysis.map(sp => `<li>${sp.name}</li>`).join("");
+      throw new Error(`A ${dt_name} is already linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
     }
 
     try {
       console.log(`Creating ${dt_name} for Ticket ${frm.doc.name}`);
 
-      const docname = await agt.utils.doc.create_doc(dt_name, { docname: "ticket_docname" }, frm.fields_dict);
+      const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, frm.fields_dict);
       if (!docname) {
-        throw new Error(`Falha ao criar ${dt_name}`);
+        throw new Error(`Failed to create ${dt_name}`);
       }
-      console.log(`Service Protocol created successfully: ${docname}`);
+      console.log(`Initial Analysis created successfully: ${docname}`);
 
-      // Find the workflow state of the newly created Service Protocol
+      // Find the workflow state of the newly created Initial Analysis
       console.log(`Fetching workflow state for ${docname}`);
       const checklist_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
       const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
@@ -78,9 +78,9 @@ const createPreAnalysis = {
 //   trigger_finish: async (frm: FrappeForm) => {
 //     const swa = frm.states.frm.selected_workflow_action;
 //     const ws = frm.doc.workflow_state;
-//     const wsInput = growatt.namespace.service_protocol.workflow_state.holding_action.name;
-//     const wsOutput = growatt.namespace.service_protocol.workflow_state.finished.name;
-//     const swaMediator = growatt.namespace.service_protocol.workflow_action.finish_service.name;
+//     const wsInput = growatt.namespace.initial_analysis.workflow_state.holding_action.name;
+//     const wsOutput = growatt.namespace.initial_analysis.workflow_state.finished.name;
+//     const swaMediator = growatt.namespace.initial_analysis.workflow_action.finish_service.name;
 
 //     if (ws !== wsInput || swa !== swaMediator)
 //       throw new Error(`Falha ao avançar workflow: o estado do workflow deve ser '${wsInput}' e a ação selecionada deve ser '${swaMediator}'.`);
@@ -134,8 +134,8 @@ const preactionTechnicalAnalysis = {
   create_checklist: async (frm: FrappeForm) => {
     const swa = frm.states.frm.selected_workflow_action;
     const ws = frm.doc.workflow_state;
-    const swa_request_checklist = agt.metadata.doctype.service_protocol.workflow_action.request_checklist.name;
-    const ws_holding_action = agt.metadata.doctype.service_protocol.workflow_state.holding_action.name;
+    const swa_request_checklist = agt.metadata.doctype.initial_analysis.workflow_action.request_checklist.name;
+    const ws_holding_action = agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name;
 
     // Validação centralizada: todos os critérios devem ser atendidos
     if (
@@ -148,31 +148,31 @@ const preactionTechnicalAnalysis = {
       swa === "" ||
       swa === null
     ) {
-      throw new Error(`Não foi possível criar checklist: critérios do workflow não atendidos.`);
+      throw new Error(`Unable to create checklist: workflow criteria not met.`);
     }
 
     const main_eqp_group = frm.doc['main_eqp_group'];
     const pair = preActionsChecklistConfig.find(c => c.group === main_eqp_group);
-    if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
+    if (!pair) throw new Error(`Equipment group is not '${main_eqp_group}'`);
     const [doctype, fieldname] = [pair.doctype, pair.table_field];
 
     // Validação de checklists abertos
     const trackerRows = frm.doc[fieldname as keyof typeof frm.doc] as ChecklistTracker[];
     if (trackerRows?.length) {
       const not_rejected = trackerRows.filter(cit =>
-        cit.child_tracker_workflow_state !== agt.metadata.doctype.service_protocol.workflow_state.rejected.name &&
+        cit.child_tracker_workflow_state !== agt.metadata.doctype.initial_analysis.workflow_state.rejected.name &&
         cit.child_tracker_doctype === doctype
       );
       if (not_rejected?.length) {
-        const available_list_html = not_rejected.map(cit => `<li> ${cit.child_tracker_docname || cit.name || 'Sem nome'} </li>`).join("");
-        throw new Error(`Já existe um ou mais checklists abertos para esse protocolo: <br><ul>${available_list_html}</ul>`);
+        const available_list_html = not_rejected.map(cit => `<li> ${cit.child_tracker_docname || cit.name || 'No name'} </li>`).join("");
+        throw new Error(`There are already one or more open checklists for this protocol: <br><ul>${available_list_html}</ul>`);
       }
     }
 
     try {
-      console.log(`Criando checklist para ${doctype}`);
+      console.log(`Creating checklist for ${doctype}`);
 
-      const docname = await agt.utils.doc.create_doc(doctype, { docname: "ticket_docname" }, frm.fields_dict);
+      const docname = await agt.utils.doc.create_doc(doctype, { ticket_docname: "docname" }, frm.fields_dict);
       if (!docname) {
         throw new Error(`Falha ao criar checklist '${doctype}'`);
       }
@@ -206,7 +206,7 @@ const preactionTechnicalAnalysis = {
 //   create_compliance_statement: async (frm: FrappeForm) => {
 //     const swa = frm.states.frm.selected_workflow_action;
 //     const ws = frm.doc.workflow_state;
-//     const swa_request_documentation = growatt.namespace.service_protocol.workflow_action.request_documentation.name;
+//     const swa_request_documentation = growatt.namespace.initial_analysis.workflow_action.request_documentation.name;
 //     const ws_shipping_proposal = growatt.namespace.ticket.workflow_state.shippingProposal.name;
 
 //     // Validação centralizada: todos os critérios devem ser atendidos
@@ -305,18 +305,18 @@ const preactionTechnicalAnalysis = {
 
 const wp: WorkflowPreActions = {
   ["Solicitar Análise"]: {
-    "Create Service Protocol": createPreAnalysis.create_pre_analysis,
+    "Create Initial Analysis": createPreAnalysis.create_pre_analysis,
   },
-  // [agt.metadata.doctype.service_protocol.workflow_action.forward_to_support.name]: {
+  // [agt.metadata.doctype.initial_analysis.workflow_action.forward_to_support.name]: {
   //   "Decide Service Partner": preactionFowardToSupport.check_service_partner,
   // },
-  [agt.metadata.doctype.service_protocol.workflow_action.request_checklist.name]: {
+  [agt.metadata.doctype.initial_analysis.workflow_action.request_checklist.name]: {
     "Create 'Checklist'": preactionTechnicalAnalysis.create_checklist
   },
-  // [agt.metadata.doctype.service_protocol.workflow_action.finish_service.name]: {
+  // [agt.metadata.doctype.initial_analysis.workflow_action.finish_service.name]: {
   //   "Finish Protocol": preactionFinish.trigger_finish
   // },
-  // [agt.metadata.doctype.service_protocol.workflow_action.request_documentation.name]: {
+  // [agt.metadata.doctype.initial_analysis.workflow_action.request_documentation.name]: {
   //   "Create 'Compliance Statement'": preactionRequestDoc.create_compliance_statement
   // }
 };

@@ -1,13 +1,14 @@
 {
  "actions": [],
  "allow_events_in_timeline": 1,
- "allow_rename": 1,
+ "autoname": "naming_series:",
  "creation": "2025-10-27 13:53:13.287605",
  "default_view": "List",
  "doctype": "DocType",
  "email_append_to": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "tab_public",
   "section_customer",
   "main_customer_email",
@@ -47,6 +48,15 @@
  ],
  "fields": [
   {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "TCK-.MM.YY.-.####",
+   "reqd": 1,
+   "default": "TCK-.MM.YY.-.####",
+   "hidden": 1
+  },
+  {
    "fieldname": "tab_public",
    "fieldtype": "Tab Break",
    "label": "Public"
@@ -54,7 +64,7 @@
   {
    "fieldname": "section_customer",
    "fieldtype": "Section Break",
-   "label": "Informa\u00e7\u00f5es do Cliente"
+   "label": "Customer Information"
   },
   {
    "fieldname": "main_customer_email",
@@ -63,7 +73,7 @@
    "in_list_view": 1,
    "in_preview": 1,
    "in_standard_filter": 1,
-   "label": "Email Principal",
+   "label": "Primary Email",
    "options": "User",
    "permlevel": 1,
    "reqd": 1
@@ -76,7 +86,7 @@
    "fetch_from": "main_customer_email.full_name",
    "fieldname": "main_customer_name",
    "fieldtype": "Data",
-   "label": "Nome Completo",
+   "label": "Full Name",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -84,7 +94,7 @@
   {
    "fieldname": "section_eqp",
    "fieldtype": "Section Break",
-   "label": "Informa\u00e7\u00f5es do Equipamento"
+   "label": "Equipment Information"
   },
   {
    "fieldname": "colbreak_eqp_1",
@@ -93,14 +103,14 @@
   {
    "fieldname": "main_eqp_serial_no",
    "fieldtype": "Data",
-   "label": "N\u00famero de S\u00e9rie",
+   "label": "Serial Number",
    "permlevel": 1,
    "reqd": 1
   },
   {
    "fieldname": "main_eqp_model_ref",
    "fieldtype": "Link",
-   "label": "Refer\u00eancia do Modelo",
+   "label": "Model Reference",
    "options": "Item",
    "permlevel": 1,
    "reqd": 1
@@ -111,7 +121,7 @@
    "fetch_if_empty": 1,
    "fieldname": "main_eqp_item_code",
    "fieldtype": "Data",
-   "label": "C\u00f3digo do Modelo",
+   "label": "Model Code",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -122,7 +132,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Modelo",
+   "label": "Model",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -130,14 +140,14 @@
   {
    "fieldname": "main_eqp_mppt_number",
    "fieldtype": "Data",
-   "label": "N\u00famero de MPPTs",
+   "label": "Number of MPPTs",
    "permlevel": 1,
    "read_only": 1
   },
   {
    "fieldname": "main_eqp_phase",
    "fieldtype": "Data",
-   "label": "Fase do Inversor",
+   "label": "Inverter Phase",
    "permlevel": 1,
    "read_only": 1
   },
@@ -149,7 +159,7 @@
    "fetch_from": "main_eqp_model_ref.equipment_type",
    "fieldname": "main_eqp_type",
    "fieldtype": "Data",
-   "label": "Tipo",
+   "label": "Type",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -159,7 +169,7 @@
    "fetch_if_empty": 1,
    "fieldname": "main_eqp_group",
    "fieldtype": "Data",
-   "label": "Grupo",
+   "label": "Group",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -169,7 +179,7 @@
    "fetch_if_empty": 1,
    "fieldname": "main_eqp_family",
    "fieldtype": "Data",
-   "label": "Familia",
+   "label": "Family",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -178,7 +188,7 @@
    "fetch_from": "main_eqp_model_ref.error_version",
    "fieldname": "main_eqp_error_version",
    "fieldtype": "Data",
-   "label": "Vers\u00e3o",
+   "label": "Version",
    "permlevel": 1,
    "read_only": 1,
    "reqd": 1
@@ -186,7 +196,7 @@
   {
    "fieldname": "service_partner_company",
    "fieldtype": "Link",
-   "label": "Parceiro de Servi\u00e7o",
+   "label": "Service Partner",
    "link_filters": "[[\"Company\",\"service_partner\",\"=\",1]]",
    "options": "Company",
    "permlevel": 1,
@@ -205,7 +215,7 @@
   {
    "fieldname": "main_uf_installation",
    "fieldtype": "Link",
-   "label": "UF da Instala\u00e7\u00e3o",
+   "label": "Installation State",
    "options": "UF",
    "permlevel": 1,
    "reqd": 1
@@ -213,7 +223,7 @@
   {
    "fieldname": "distributor",
    "fieldtype": "Link",
-   "label": "Distribuidor",
+   "label": "Distributor",
    "options": "Distributor",
    "permlevel": 1,
    "reqd": 1
@@ -221,27 +231,27 @@
   {
    "fieldname": "main_eqp_start_firmware",
    "fieldtype": "Data",
-   "label": "Firmware Inicial",
+   "label": "Initial Firmware",
    "permlevel": 1,
    "read_only": 1
   },
   {
    "fieldname": "main_eqp_end_firmware",
    "fieldtype": "Data",
-   "label": "Firmware Final",
+   "label": "Final Firmware",
    "permlevel": 1,
    "read_only": 1
   },
   {
    "fieldname": "section_checklist_links",
    "fieldtype": "Section Break",
-   "label": "Documentos Derivados"
+   "label": "Derived Documents"
   },
   {
    "depends_on": "eval:doc.workflow_state!=\"Draft\"\r\n",
    "fieldname": "add_child_button",
    "fieldtype": "Button",
-   "label": "+ Criar Derivado",
+   "label": "+ Create Derived",
    "permlevel": 1
   },
   {
@@ -279,18 +289,18 @@
    "label": "Sub-Workflow"
   },
   {
-   "description": "*<strong>Referenciado</strong> com o documento acima. Acesse o link para visualizar.",
+   "description": "*<strong>Referenced</strong> with the document above. Access the link to view.",
    "fieldname": "ticket_docname",
    "fieldtype": "Link",
-   "label": "Protocolo Referenciado",
+   "label": "Referenced Protocol",
    "options": "Ticket",
    "read_only": 1
   },
   {
    "fieldname": "priority",
    "fieldtype": "Select",
-   "label": "Prioridade",
-   "options": "\nM\u00e1xima\nReclame Aqui\nProcesso Judicial"
+   "label": "Priority",
+   "options": "\nMaximum\nReclame Aqui\nLegal Process"
   },
   {
    "fieldname": "email_applicant",
@@ -306,7 +316,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-12-15 17:52:29.924736",
+ "modified": "2025-12-16 08:13:29.456639",
  "modified_by": "Administrator",
  "module": "Frappe Growatt Ticket",
  "name": "Ticket",

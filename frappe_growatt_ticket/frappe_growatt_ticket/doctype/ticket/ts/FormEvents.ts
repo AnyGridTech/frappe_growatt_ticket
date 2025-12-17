@@ -1,6 +1,6 @@
 /// <reference path="./types/frappe-tooltip.d.ts" />
 
-import { SerialNo, ServiceProtocol, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
+import { SerialNo, InitialAnalysis, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
 import type { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
 import { ticket_utils } from "./Utils";
 import { sub_workflow } from "./SubWorkflow";
@@ -24,9 +24,9 @@ frappe.ui.form.on("Ticket", {
   },
   before_save: async (form: FrappeForm<Ticket>) => {
     if (!form.doc?.main_eqp_serial_no) {
-      frappe.throw(__(`Número de série requerido.`));
+      frappe.throw(__("Serial number required."));
     } else if (!agt.utils.validate_serial_number(form.doc?.main_eqp_serial_no)) {
-      frappe.throw(__(`Número de série inválido.`));
+      frappe.throw(__("Invalid serial number."));
     }
     await ticket_utils.share_doc_trigger(form);
   },
@@ -69,14 +69,14 @@ frappe.ui.form.on("Ticket", {
       .catch(e => console.error(e))
       .then(r => r?.message);
     if (serial_no) {
-      const service_protocols = await frappe.db.get_list<ServiceProtocol>('Ticket', {
+      const initial_analysis = await frappe.db.get_list<InitialAnalysis>('Ticket', {
         filters: { main_eqp_serial_no },
         fields: ['name', 'docstatus'],
       }).catch(e => console.error(e));
-      if (service_protocols && service_protocols.length > 0) {
-        for (let sp of service_protocols) {
+      if (initial_analysis && initial_analysis.length > 0) {
+        for (let sp of initial_analysis) {
           if (sp.docstatus === 0) {
-            frappe.throw(__(`Número de série já possui um ticket ativo: ${sp.name}`));
+            frappe.throw(__(` Serial number already has an active ticket: ${sp.name}`));
             return;
           }
         }

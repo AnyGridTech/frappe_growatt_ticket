@@ -10,7 +10,7 @@ const ticket_utils = {
     const wcs = agt.utils.table.row.find(cur_frm, 'checklist_table_smart_meter', { or: { docstatus: [0] } });
     const wcem = agt.utils.table.row.find(cur_frm, 'checklist_table_smart_energy_manager', { or: { docstatus: [0] } });
     const wcd = agt.utils.table.row.find(cur_frm, 'checklist_table_datalogger', { or: { docstatus: [0] } });
-    const wsp = agt.utils.table.row.find(cur_frm, 'checklist_table_service_protocol', { or: { docstatus: [0] } });
+    const wsp = agt.utils.table.row.find(cur_frm, 'checklist_table_initial_analysis', { or: { docstatus: [0] } });
 
     const clean_dict = Object.entries(fields_record)
       .filter(([_, v]) => v.value !== undefined)
@@ -45,8 +45,8 @@ const ticket_utils = {
       await agt.utils.doc.share_doc('Service Protocol Datalogger Checklist', row.checklist_docname, shared_users);
     });
     wsp?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Initial Analysis', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Initial Analysis', row.checklist_docname, shared_users);
     });
   },
   fields_listener(frm: FrappeForm<Ticket>) {
@@ -91,14 +91,14 @@ const ticket_utils = {
     if (frm.doc.__islocal) return;
     const serial_no = frm.doc.main_eqp_serial_no!;
     if (!serial_no) {
-      console.error("Número de série não fornecido");
+      console.error("Serial number not provided");
       return;
     }
 
     const db_sn = await frappe.db
       .get_value<SerialNo>('Serial No', serial_no, ['serial_no', 'item_code', 'warehouse', 'company', 'status', 'workflow_state'])
       .catch(e => {
-        console.error("Erro ao buscar número de série:", e);
+        console.error("Error fetching serial number:", e);
         return null;
       })
       .then(r => r?.message);
@@ -107,7 +107,7 @@ const ticket_utils = {
     // const isEmptyObj = (obj: any) => obj && typeof obj === "object" && Object.keys(obj).length === 0;
     const service_partner_company = frm.doc.service_partner_company;
     if (!service_partner_company) {
-      console.error("Empresa parceira de serviço não definida");
+      console.error("Service partner company not defined");
       return;
     }
 
@@ -155,7 +155,7 @@ const ticket_utils = {
 
         console.log("Fields for Serial No creation:", JSON.stringify(serialNoFields));
 
-        const sn_docname = await agt.utils.doc.create_doc<SerialNo>('Serial No', { docname: "ticket_docname" }, serialNoFields);
+        const sn_docname = await agt.utils.doc.create_doc<SerialNo>('Serial No', {}, serialNoFields);
 
         if (!sn_docname) {
           throw new Error("Failed to create Serial No - no document name returned");
@@ -224,7 +224,7 @@ const ticket_utils = {
 
     const doctypes = [
       'Ticket',
-      'Service Protocol',
+      'Initial Analysis',
       'Service Protocol Inverter Checklist',
       'Service Protocol EV Charger Checklist',
       'Service Protocol Battery Checklist',
@@ -343,9 +343,10 @@ const ticket_utils = {
           const doctype = $el.attr('data-doctype');
           const docname = $el.attr('data-docname');
           if (!doctype || !docname) return;
-          frappe.iframe_view._open_doc_modal(doctype, docname);
+          (frappe as any).iframe.view._open_doc_modal(doctype, docname);
         });
     }
   },
-};
+};                       
 export { ticket_utils };
+
