@@ -1,278 +1,264 @@
 
 import { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
-import { ChecklistTracker } from "@anygridtech/frappe-agt-types/agt/doctype";
 
-const subWorkflowChecklistConfig = [
-  { group: "Inverter", doctype: "Service Protocol Inverter Checklist", table_field: "child_tracker_table" },
-  { group: "EV Charger", doctype: "Service Protocol EV Charger Checklist", table_field: "child_tracker_table" },
-  { group: "Battery", doctype: "Service Protocol Battery Checklist", table_field: "child_tracker_table" },
-  { group: "Smart Meter", doctype: "Service Protocol Smart Meter Checklist", table_field: "child_tracker_table" },
-  { group: "Smart Energy Manager", doctype: "Service Protocol Smart Energy Manager Checklist", table_field: "child_tracker_table" },
-  { group: "Datalogger", doctype: "Service Protocol Datalogger Checklist", table_field: "child_tracker_table" },
-];
-
-const subWorkflowList: Record<string, string[]> = {
-  "Initial Analysis": ["Checklist", "Proposed Dispatch"],
-  "Checklist": ["Compliance Statement", "Proposed Dispatch"],
-  "Proposed Dispatch": ["Compliance Statement"],
-  "Compliance Statement": ["Logistics"],
+/**
+ * Mapeamento entre grupos de equipamento e seus respectivos doctypes de checklist
+ */
+const checklistType: Record<string, string> = {
+  "Inverter": "Checklist of Inverter",
+  "EV Charger": "Checklist of EV Charger",
+  "Battery": "Checklist of Battery",
+  "Smart Meter": "Checklist of Smart Meter",
+  "Smart Energy Manager": "Checklist of Smart Energy Manager",
+  "Datalogger": "Checklist of Datalogger"
 };
 
-async function handleInitialAnalysis(form: FrappeForm) {
-  const dt_name = "Initial Analysis";
-  const fieldname = "child_tracker_table";
-  if ((form as any)._subworkflow_creating) return;
-  (form as any)._subworkflow_creating = true;
-  try {
-    const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: form.doc.name },
-      fields: ['name'],
-    });
-    if (existingInitialAnalysis && existingInitialAnalysis.length > 0) {
-      const existing_list_html = existingInitialAnalysis.map(sp => `<li>${sp.name}</li>`).join("");
-      console.warn(`Already exists a ${dt_name} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
-      return;
+/**
+ * Configuração completa e única do fluxo de sub-workflows
+ * Define para cada etapa: dependências, próximas etapas permitidas e configurações especiais
+ */
+const subWorkflow: Record<string, {
+  doctype: string | ((form: FrappeForm) => string);  // Nome do doctype ou função para resolver dinamicamente
+  requiredState: string;                              // Estado necessário do doctype anterior
+  dependencies: string[];                             // Doctypes que devem estar "Finished" para criar este
+  canAdvanceTo: string[];                             // Próximas etapas permitidas pelo botão de avançar
+  skipValidation?: boolean;                           // Se true, não valida dependências
+  prepareData?: (form: FrappeForm) => Promise<Record<string, any>>;  // Função para preparar dados antes da criação
+}> = {
+  "Initial Analysis": {
+    doctype: "Initial Analysis",
+    requiredState: "Finished",
+    dependencies: [],
+    canAdvanceTo: ["Checklist", "Proposed Dispatch"],
+    skipValidation: true
+  },
+  "Checklist": {
+    doctype: (form) => {
+      const group = form.doc['main_eqp_group'];
+      const doctype = checklistType[group];
+      if (!doctype) throw new Error(`No checklist configured for equipment group: ${group}`);
+      return doctype;
+    },
+    requiredState: "Finished",
+    dependencies: ["Initial Analysis"],
+    canAdvanceTo: ["Compliance Statement", "Proposed Dispatch"],
+    prepareData: async (form) => {
+      // Coleta informações necessárias do Initial Analysis
+      const main_eqp_has_battery = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'main_eqp_has_battery');
+      const main_eqp_has_sem = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'main_eqp_has_sem');
+      const main_eqp_has_sm = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'main_eqp_has_sm');
+      const main_eqp_has_neutral = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'main_eqp_has_neutral');
+      const main_eqp_has_transformer = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'main_eqp_has_transformer');
+      const ext_fault_date = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'ext_fault_date');
+      const ext_fault_code = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'ext_fault_code');
+      const ext_fault_customer_description = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'ext_fault_customer_description');
+      
+      return {
+        main_eqp_has_battery,
+        main_eqp_has_sem,
+        main_eqp_has_sm,
+        main_eqp_has_neutral,
+        main_eqp_has_transformer,
+        ext_fault_date,
+        ext_fault_code,
+        ext_fault_customer_description
+      };
     }
-    // Checa novamente antes de criar
-    const freshProtocols = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: form.doc.name },
+  },
+  "Proposed Dispatch": {
+    doctype: "Proposed Dispatch",
+    requiredState: "Finished",
+    dependencies: ["Checklist"],
+    canAdvanceTo: ["Compliance Statement"]
+  },
+  "Compliance Statement": {
+    doctype: "Compliance Statement",
+    requiredState: "Finished",
+    dependencies: ["Checklist", "Proposed Dispatch"],
+    canAdvanceTo: ["Logistics"]
+  }
+};
+
+/**
+ * Resolve o nome do doctype a partir da configuração (pode ser string ou função)
+ */
+function resolveDoctypeName(form: FrappeForm, subWorkflowKey: string): string {
+  const config = subWorkflow[subWorkflowKey];
+  if (!config) throw new Error(`No configuration for: ${subWorkflowKey}`);
+  
+  return typeof config.doctype === 'function' ? config.doctype(form) : config.doctype;
+}
+
+/**
+ * Valida se um doctype pode ser criado baseado no fluxo
+ * Verifica diretamente no banco de dados se as dependências estão satisfeitas
+ */
+async function validateCreationFlow(
+  form: FrappeForm,
+  subWorkflowKey: string
+): Promise<{ isValid: boolean; errorMessage?: string }> {
+  const config = subWorkflow[subWorkflowKey];
+  if (!config || !config.dependencies || config.dependencies.length === 0) {
+    return { isValid: true };
+  }
+  
+  // Verifica se pelo menos uma dependência está satisfeita
+  for (const depKey of config.dependencies) {
+    const depConfig = subWorkflow[depKey];
+    if (!depConfig) continue;
+    
+    const doctypeToCheck = resolveDoctypeName(form, depKey);
+    
+    const existingDocs = await frappe.db.get_list(doctypeToCheck, {
+      filters: { 
+        ticket_docname: form.doc.name,
+        workflow_state: depConfig.requiredState
+      },
       fields: ['name'],
     });
-    if (freshProtocols && freshProtocols.length > 0) return;
-    const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, form.fields_dict);
-    if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
-    const checklist_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
-    const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
-    await agt.utils.table.row.add_one(form, fieldname, {
-      child_tracker_docname: docname,
-      child_tracker_doctype: dt_name,
-      child_tracker_workflow_state: workflow_state
-    });
-    await form.set_value('sub_workflow', "Initial Analysis");
-    form.doc['sub_workflow'] = "Initial Analysis";
-    form.dirty();
-    await form.save();
-  } finally {
-    (form as any)._subworkflow_creating = false;
+    
+    if (existingDocs && existingDocs.length > 0) {
+      return { isValid: true };
+    }
   }
+  
+  // Nenhuma dependência satisfeita
+  const depNames = config.dependencies.map(d => resolveDoctypeName(form, d)).join(" or ");
+  const targetDoctype = resolveDoctypeName(form, subWorkflowKey);
+  
+  return {
+    isValid: false,
+    errorMessage: `Cannot create ${targetDoctype}: ${depNames} must be in 'Finished' state first.`
+  };
 }
 
-// Função de recuperação para soft lock: se está no subworkflow Initial Analysis mas não há nenhum vinculado
-async function recoverInitialAnalysisSoftLock(form: FrappeForm) {
-  const dt_name = "Initial Analysis";
-  const sub_workflow_value = form.doc['sub_workflow'];
-  
-  // Se não está no subworkflow Initial Analysis, não precisa recuperar
-  if (sub_workflow_value !== "Initial Analysis") return;
-  
-  // Verifica se há algum Initial Analysis vinculado
-  const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
-    filters: { ticket_docname: form.doc.name },
-    fields: ['name'],
-  });
-  
-  // Se já existe, não precisa recuperar
-  if (existingInitialAnalysis && existingInitialAnalysis.length > 0) return;
-  
-  // Soft lock detected: create Initial Analysis
-  console.warn(`⚠️ Soft lock detected: sub_workflow is in 'Initial Analysis' but there is no Initial Analysis linked. Creating automatically...`);
-  await handleInitialAnalysis(form);
-}
-
-async function handleChecklist(form: FrappeForm) {
-  const main_eqp_group = form.doc['main_eqp_group'];
-  const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
-  if (!pair) throw new Error(`Equipment group is not '${main_eqp_group}'`);
-  const [doctype, fieldname] = [pair.doctype, pair.table_field];
-  if ((form as any)._subworkflow_creating) return;
+/**
+ * Função universal para criar doctypes no sub-workflow
+ * Gerencia todo o fluxo: validação, criação, atualização da tabela tracker e mudança de sub_workflow
+ */
+async function createSubWorkflowDoctype(
+  form: FrappeForm,
+  subWorkflowKey: string
+): Promise<string | null> {
+  if ((form as any)._subworkflow_creating) return null;
   (form as any)._subworkflow_creating = true;
+  
   try {
-    const trackerRows = form.doc[fieldname as keyof typeof form.doc] as ChecklistTracker[];
-    if (trackerRows?.length) {
-      const not_rejected = trackerRows.filter(cit =>
-        cit.child_tracker_workflow_state !== agt.metadata.doctype.initial_analysis.workflow_state.rejected.name &&
-        cit.child_tracker_doctype === doctype
-      );
-      if (not_rejected?.length) {
-        const available_list_html = not_rejected.map(cit => `<li> ${cit.child_tracker_docname || cit.name || 'No name'} </li>`).join("");
-        console.warn(`Already exists a ${doctype} linked to this Ticket: <br><ul>${available_list_html}</ul>`);
-        await form.set_value('sub_workflow', "Checklist");
-        form.doc['sub_workflow'] = "Checklist";
-        form.dirty();
-        await form.save();
-        return;
+    const config = subWorkflow[subWorkflowKey];
+    if (!config) throw new Error(`No configuration for: ${subWorkflowKey}`);
+    
+    const doctypeName = resolveDoctypeName(form, subWorkflowKey);
+    
+    // Validação do fluxo
+    if (!config.skipValidation) {
+      const validation = await validateCreationFlow(form, subWorkflowKey);
+      if (!validation.isValid) {
+        console.warn(validation.errorMessage || `Cannot create ${doctypeName}.`);
+        return null;
       }
     }
-    // Checa novamente antes de criar
-    const freshRows = form.doc[fieldname as keyof typeof form.doc] as ChecklistTracker[];
-    if (freshRows?.some(cit => cit.child_tracker_doctype === doctype)) return;
     
-    // Criar o Checklist automaticamente
-    const docname = await agt.utils.doc.create_doc(doctype, { ticket_docname: "docname" }, form.fields_dict);
-    if (!docname) throw new Error(`Failed to create ${doctype}`);
+    // Verifica se já existe o doctype vinculado
+    const existingDocs = await frappe.db.get_list(doctypeName, {
+      filters: { ticket_docname: form.doc.name },
+      fields: ['name'],
+    });
     
-    const checklist_doc = await frappe.db.get_value(doctype, docname, ['workflow_state']);
-    const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
+    if (existingDocs && existingDocs.length > 0) {
+      const existing_list_html = existingDocs.map(doc => `<li>${doc.name}</li>`).join("");
+      console.warn(`Already exists a ${doctypeName} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
+      
+      // Atualiza o sub_workflow mesmo que já exista
+      await form.set_value('sub_workflow', subWorkflowKey);
+      form.doc['sub_workflow'] = subWorkflowKey;
+      form.dirty();
+      await form.save();
+      
+      return null;
+    }
     
-    await agt.utils.table.row.add_one(form, fieldname, {
+    // Prepara dados adicionais se houver função prepareData configurada
+    let additionalData: Record<string, any> = { ticket_docname: "docname" };
+    if (config.prepareData) {
+      const preparedData = await config.prepareData(form);
+      additionalData = { ...additionalData, ...preparedData };
+    }
+    
+    // Cria o novo doctype com os dados preparados
+    const docname = await agt.utils.doc.create_doc(doctypeName, additionalData, form.fields_dict);
+    if (!docname) throw new Error(`Failed to create ${doctypeName}`);
+    
+    // Obtém o workflow_state do documento criado
+    const doc = await frappe.db.get_value(doctypeName, docname, ['workflow_state']);
+    const workflow_state = doc?.message?.workflow_state || 'Draft';
+    
+    // Adiciona na tabela tracker
+    await agt.utils.table.row.add_one(form, "child_tracker_table", {
       child_tracker_docname: docname,
-      child_tracker_doctype: doctype,
+      child_tracker_doctype: doctypeName,
       child_tracker_workflow_state: workflow_state
     });
     
-    await form.set_value('sub_workflow', "Checklist");
-    form.doc['sub_workflow'] = "Checklist";
+    // Atualiza o sub_workflow e salva
+    await form.set_value('sub_workflow', subWorkflowKey);
+    form.doc['sub_workflow'] = subWorkflowKey;
     form.dirty();
     await form.save();
+    
+    // Mensagem de sucesso
+    frappe.show_alert({
+      message: __(`${doctypeName} created successfully. Advanced to: ${subWorkflowKey}`),
+      indicator: 'green'
+    }, 5);
+    
+    return docname;
   } finally {
     (form as any)._subworkflow_creating = false;
   }
 }
 
-async function handleProposedDispatch(form: FrappeForm) {
-  const dt_name = "Proposed Dispatch";
-  const fieldname = "child_tracker_table";
-  const main_eqp_group = form.doc['main_eqp_group'];
-  const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
-  if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
-  if ((form as any)._subworkflow_creating) return;
-  (form as any)._subworkflow_creating = true;
+/**
+ * Função universal para lidar com criação de qualquer doctype no subworkflow
+ */
+async function handleSubWorkflowStep(form: FrappeForm, subWorkflowKey: string) {
   try {
-    // Checklist do tipo correto deve estar concluído
-    const checklist_doctype = pair.doctype;
-    const checklist_fieldname = pair.table_field;
-    const trackerRows = form.doc[checklist_fieldname as keyof typeof form.doc] as ChecklistTracker[];
-    const completedChecklist = trackerRows?.find(cit =>
-      cit.child_tracker_doctype === checklist_doctype &&
-      (cit.child_tracker_workflow_state === agt.metadata.doctype.initial_analysis.workflow_state.finished.name ||
-        cit.child_tracker_workflow_state === "Concluído")
-    );
-    if (!completedChecklist) {
-      console.warn(`There is no Checklist of type '${checklist_doctype}' with status 'Completed' for this Ticket. Proposed Dispatch will not be created.`);
-      return;
-    }
-    // Não criar se já existir Proposed Dispatch
-    const existingPD = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: form.doc.name },
-      fields: ['name'],
-    });
-    if (existingPD && existingPD.length > 0) {
-      const existing_list_html = existingPD.map(sp => `<li>${sp.name}</li>`).join("");
-      console.warn(`Already exists a ${dt_name} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
-      return;
-    }
-    // Checa novamente antes de criar
-    const freshPD = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: form.doc.name },
-      fields: ['name'],
-    });
-    if (freshPD && freshPD.length > 0) return;
-    const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, form.fields_dict);
-    if (!docname) throw new Error(`Failed to create ${dt_name}`);
-    const pd_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
-    const workflow_state = pd_doc?.message?.workflow_state || 'Draft';
-    await agt.utils.table.row.add_one(form, fieldname, {
-      child_tracker_docname: docname,
-      child_tracker_doctype: dt_name,
-      child_tracker_workflow_state: workflow_state
-    });
-    await form.set_value('sub_workflow', "Proposed Dispatch");
-    form.doc['sub_workflow'] = "Proposed Dispatch";
-    form.dirty();
-    await form.save();
-  } finally {
-    (form as any)._subworkflow_creating = false;
+    await createSubWorkflowDoctype(form, subWorkflowKey);
+  } catch (error) {
+    console.error(`Error handling sub-workflow step ${subWorkflowKey}:`, error);
   }
 }
 
-async function handleComplianceStatement(form: FrappeForm) {
-  const dt_name = "Compliance Statement";
-  const fieldname = "child_tracker_table";
-  const main_eqp_group = form.doc['main_eqp_group'];
-  const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
-  if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
-  if ((form as any)._subworkflow_creating) return;
-  (form as any)._subworkflow_creating = true;
+/**
+ * Função universal de recuperação de soft lock
+ * Verifica se o sub_workflow está em uma etapa mas não há doctype vinculado
+ */
+async function recoverSubWorkflowSoftLock(form: FrappeForm, subWorkflowKey: string) {
+  if (form.doc['sub_workflow'] !== subWorkflowKey) return;
+  
   try {
-    const checklist_doctype = pair.doctype;
-    const checklist_fieldname = pair.table_field;
-    const trackerRows = form.doc[checklist_fieldname as keyof typeof form.doc] as ChecklistTracker[];
-    const completedChecklist = trackerRows?.find(cit =>
-      cit.child_tracker_doctype === checklist_doctype &&
-      (cit.child_tracker_workflow_state === agt.metadata.doctype.initial_analysis.workflow_state.finished.name ||
-        cit.child_tracker_workflow_state === "Concluído")
-    );
-    if (!completedChecklist) {
-      console.warn(`There is no Checklist of type '${checklist_doctype}' with status 'Completed' for this Ticket. Compliance Statement will not be created.`);
-      return;
-    }
-    const existingComplianceStatement = await frappe.db.get_list(dt_name, {
+    const doctypeName = resolveDoctypeName(form, subWorkflowKey);
+    
+    const existingDocs = await frappe.db.get_list(doctypeName, {
       filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
-    if (existingComplianceStatement && existingComplianceStatement.length > 0) {
-      const existing_list_html = existingComplianceStatement.map(sp => `<li>${sp.name}</li>`).join("");
-      console.warn(`Already exists a ${dt_name} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
-      return;
-    }
-    // Checa novamente antes de criar
-    const freshCompliance = await frappe.db.get_list(dt_name, {
-      filters: { ticket_docname: form.doc.name },
-      fields: ['name'],
-    });
-    if (freshCompliance && freshCompliance.length > 0) return;
-    const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, form.fields_dict);
-    if (!docname) throw new Error(`Falha ao criar ${dt_name}`);
-    const checklist_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
-    const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
-    await agt.utils.table.row.add_one(form, fieldname, {
-      child_tracker_docname: docname,
-      child_tracker_doctype: dt_name,
-      child_tracker_workflow_state: workflow_state
-    });
-    await form.set_value('sub_workflow', "Compliance Statement");
-    form.doc['sub_workflow'] = "Compliance Statement";
-    form.dirty();
-    await form.save();
-  } finally {
-    (form as any)._subworkflow_creating = false;
+    
+    if (existingDocs && existingDocs.length > 0) return;
+    
+    console.warn(`⚠️ Soft lock detected: sub_workflow is in '${subWorkflowKey}' but there is no ${doctypeName} linked. Creating automatically...`);
+    await handleSubWorkflowStep(form, subWorkflowKey);
+  } catch (error) {
+    console.error(`Error recovering soft lock for ${subWorkflowKey}:`, error);
   }
 }
-
-
-// Validações centralizadas para cada etapa
-const subWorkflowValidators: Record<string, (form: FrappeForm) => Promise<string | null>> = {
-  "Checklist": async (form) => {
-    // Só pode avançar para Checklist se existir Initial Analysis vinculado
-    const trackerRows = form.doc["child_tracker_table"] as ChecklistTracker[];
-    const hasInitialAnalysis = trackerRows?.some(row => row.child_tracker_doctype === "Initial Analysis");
-    if (!hasInitialAnalysis) return "It is necessary to create the Initial Analysis before advancing to Checklist.";
-    return null;
-  },
-  "Compliance Statement": async (form) => {
-    // Só pode avançar para Compliance Statement se Checklist estiver concluído
-    const main_eqp_group = form.doc['main_eqp_group'];
-    const pair = subWorkflowChecklistConfig.find(c => c.group === main_eqp_group);
-    if (!pair) return `Equipment group is not '${main_eqp_group}'`;
-    const checklist_doctype = pair.doctype;
-    const trackerRows = form.doc[pair.table_field as keyof typeof form.doc] as ChecklistTracker[];
-    const completedChecklist = trackerRows?.find(cit =>
-      cit.child_tracker_doctype === checklist_doctype &&
-      (cit.child_tracker_workflow_state === agt.metadata.doctype.initial_analysis.workflow_state.finished.name ||
-        cit.child_tracker_workflow_state === "Concluído")
-    );
-    if (!completedChecklist) return `Checklist of type '${checklist_doctype}' needs to be completed to advance to Compliance Statement.`;
-    return null;
-  },
-  // Add other validations as needed
-};
 
 function moveFowardButton(form: FrappeForm) {
   if (!frappe.boot.user.roles.includes("System Manager")) return;
 
   const $button = cur_frm.add_custom_button(__("Avançar subetapa"), async () => {
     const current = form.doc['sub_workflow'];
-    const nextSteps = subWorkflowList[current] || [];
+    const currentConfig = subWorkflow[current];
+    const nextSteps = currentConfig?.canAdvanceTo || [];
     if (!nextSteps.length) {
       frappe.msgprint(__("No next steps available."));
       return;
@@ -293,21 +279,8 @@ function moveFowardButton(form: FrappeForm) {
       primary_action_label: __("Advance"),
       primary_action: async (values: any) => {
         const status = values.next_status;
-        // Validação centralizada
-        if (subWorkflowValidators[status]) {
-          const errorMsg = await subWorkflowValidators[status](form);
-          if (errorMsg) {
-            frappe.msgprint({
-              title: __("Criteria not met"),
-              message: errorMsg,
-              indicator: "red"
-            });
-            agt.utils.dialog.close_by_title(dialogTitle);
-            return;
-          }
-        }
         frappe.confirm(
-          __("Confirming will create a doctype of type <b>" + status + "</b> and this action is irreversible. Do you want to proceed?"),
+          __("Confirming will advance to substep <b>" + status + "</b>. Do you want to proceed?"),
           async () => {
             await form.set_value('sub_workflow', status);
             form.doc['sub_workflow'] = status;
@@ -357,20 +330,36 @@ const sub_workflow = {
       return;
     }
     
-    // Tenta recuperar de soft lock antes de prosseguir
-    await recoverInitialAnalysisSoftLock(form);
+    // Tenta recuperar de soft lock antes de prosseguir (para todas as etapas configuradas)
+    for (const subWorkflowKey of Object.keys(subWorkflow)) {
+      await recoverSubWorkflowSoftLock(form, subWorkflowKey);
+    }
     
+    // Fluxo automático de criação baseado no sub_workflow atual
+    // Valida dependências antes de criar cada etapa
     if (sub_workflow_value !== "Initial Analysis" && (sub_workflow_value === "" || sub_workflow_value === null || sub_workflow_value === undefined)) {
-      await handleInitialAnalysis(form);
+      const validation = await validateCreationFlow(form, "Initial Analysis");
+      if (validation.isValid) {
+        await handleSubWorkflowStep(form, "Initial Analysis");
+      }
     }
     if (sub_workflow_value !== "Checklist" && (sub_workflow_value === "Initial Analysis")) {
-      await handleChecklist(form);
+      const validation = await validateCreationFlow(form, "Checklist");
+      if (validation.isValid) {
+        await handleSubWorkflowStep(form, "Checklist");
+      }
     }
     if (sub_workflow_value !== "Proposed Dispatch" && (sub_workflow_value === "Checklist" || sub_workflow_value === "Compliance Statement")) {
-      await handleProposedDispatch(form);
+      const validation = await validateCreationFlow(form, "Proposed Dispatch");
+      if (validation.isValid) {
+        await handleSubWorkflowStep(form, "Proposed Dispatch");
+      }
     }
     if (sub_workflow_value !== "Compliance Statement" && (sub_workflow_value === "Proposed Dispatch" || sub_workflow_value === "Checklist")) {
-      await handleComplianceStatement(form);
+      const validation = await validateCreationFlow(form, "Compliance Statement");
+      if (validation.isValid) {
+        await handleSubWorkflowStep(form, "Compliance Statement");
+      }
     }
     moveFowardButton(form); // trigger move forward button
   }

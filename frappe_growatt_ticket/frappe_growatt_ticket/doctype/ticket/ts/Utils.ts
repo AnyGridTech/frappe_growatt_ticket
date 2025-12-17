@@ -21,28 +21,28 @@ const ticket_utils = {
 
     const shared_users = frappe.model.get_shared('Ticket', cur_frm.docname);
     wci?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol Inverter Checklist', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol Inverter Checklist', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Checklist of Inverter', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Checklist of Inverter', row.checklist_docname, shared_users);
     });
     wcc?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol EV Charger Checklist', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol EV Charger Checklist', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Checklist of EV Charger', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Checklist of EV Charger', row.checklist_docname, shared_users);
     });
     wcb?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol Battery Checklist', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol Battery Checklist', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Checklist of Battery', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Checklist of Battery', row.checklist_docname, shared_users);
     });
     wcs?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol Smart Meter Checklist', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol Smart Meter Checklist', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Checklist of Smart Meter', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Checklist of Smart Meter', row.checklist_docname, shared_users);
     });
     wcem?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol Smart Energy Manager Checklist', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol Smart Energy Manager Checklist', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Checklist of Smart Energy Manager', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Checklist of Smart Energy Manager', row.checklist_docname, shared_users);
     });
     wcd?.forEach(async row => {
-      await agt.utils.doc.update_doc('Service Protocol Datalogger Checklist', row.checklist_docname, clean_dict);
-      await agt.utils.doc.share_doc('Service Protocol Datalogger Checklist', row.checklist_docname, shared_users);
+      await agt.utils.doc.update_doc('Checklist of Datalogger', row.checklist_docname, clean_dict);
+      await agt.utils.doc.share_doc('Checklist of Datalogger', row.checklist_docname, shared_users);
     });
     wsp?.forEach(async row => {
       await agt.utils.doc.update_doc('Initial Analysis', row.checklist_docname, clean_dict);
@@ -225,12 +225,12 @@ const ticket_utils = {
     const doctypes = [
       'Ticket',
       'Initial Analysis',
-      'Service Protocol Inverter Checklist',
-      'Service Protocol EV Charger Checklist',
-      'Service Protocol Battery Checklist',
-      'Service Protocol Smart Meter Checklist',
-      'Service Protocol Smart Energy Manager Checklist',
-      'Service Protocol Datalogger Checklist',
+      'Checklist of Inverter',
+      'Checklist of EV Charger',
+      'Checklist of Battery',
+      'Checklist of Smart Meter',
+      'Checklist of Smart Energy Manager',
+      'Checklist of Datalogger',
       'Proposed Dispatch',
       'Compliance Statement',
     ];
@@ -248,7 +248,7 @@ const ticket_utils = {
       [
         {
           fieldname: 'child_tracker_docname',
-          label: 'Visualizar Documento',
+          label: __('View Document'),
           formatter: (value, doc) => {
             if (!value || !doc['child_tracker_doctype']) return String(value || '');
             return `<a href="#" class="child-tracker-open" data-doctype="${String(doc['child_tracker_doctype']).replace(/\"/g, '&quot;')}" data-docname="${String(value).replace(/\"/g, '&quot;')}">${String(value)} <i class="fa fa-external-link" style="font-size: 1.25em; color: var(--text-muted)"></i></a>`;
@@ -256,7 +256,7 @@ const ticket_utils = {
         },
         {
           fieldname: 'child_tracker_doctype',
-          label: 'Tipo de Documento',
+          label: __('Document Type'),
           formatter: (value) => {
             if (!value) return String(value || '');
             const slug = String(value).toLowerCase().replace(/\s+/g, '-');
@@ -265,39 +265,32 @@ const ticket_utils = {
         },
         {
           fieldname: 'child_tracker_workflow_state',
-          label: 'Status do Documento',
+          label: __('Document Status'),
           formatter: (value, doc) => {
             if (!value) return String(value || '');
 
             const state = String(value);
 
-            // Mapeamento de cores baseado nos estados mais comuns do workflow
+            // Color mapping based on common workflow states
             const stateColorMap: Record<string, string> = {
               'Draft': 'orange',
-              'Rascunho': 'orange',
-              'Submitted': 'blue',
-              'Submetido': 'blue',
+              'Active': 'blue',
               'Approved': 'green',
-              'Aprovado': 'green',
               'Rejected': 'red',
-              'Rejeitado': 'red',
               'Cancelled': 'grey',
-              'Cancelado': 'grey',
               'Finished': 'green',
-              'Concluído': 'green',
-              'Finalizado': 'green',
-              'Análise Preliminar': 'purple',
-              'Cliente: Corrigir Informações': 'orange',
-              'Cliente: Finalizar Preenchimento': 'orange',
-              'Revisão': 'yellow',
+              'Preliminary Analysis': 'purple',
+              'Customer: Correct Information': 'orange',
+              'Customer: Complete Form': 'orange',
+              'Review': 'yellow',
               'Checklist': 'blue',
-              'Proposta de Envio': 'purple',
-              'Declaração de Conformidade': 'darkblue',
-              'Garantia Aprovada': 'green',
-              'Cliente: Ação Necessária': 'orange'
+              'Dispatch Proposal': 'purple',
+              'Compliance Statement': 'darkblue',
+              'Warranty Approved': 'green',
+              'Customer: Action Required': 'orange'
             };
 
-            // Tenta primeiro usar os metadados do workflow do Frappe
+            // Try to use Frappe workflow metadata first
             const doctype = doc['child_tracker_doctype'];
             if (doctype && (window as any).frappe?.boot?.workflows) {
               try {
@@ -349,4 +342,3 @@ const ticket_utils = {
   },
 };                       
 export { ticket_utils };
-
