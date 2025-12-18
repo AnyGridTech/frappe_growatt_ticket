@@ -3,7 +3,8 @@
 import { SerialNo, InitialAnalysis, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
 import type { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
 import { ticket_utils } from "./Utils";
-import { sub_workflow } from "./SubWorkflow";
+// import { orchestrator } from "./Orchestrator_new";
+import { orchestrator } from "./SubWorkflow";
 import "./Setup";
 
 declare var frappe_growatt_ticket: any;
@@ -43,7 +44,7 @@ frappe.ui.form.on("Ticket", {
     ticket_utils.runSync(form);
     await ticket_utils.set_service_partner(form);
     await ticket_utils.trigger_create_sn_into_db(form);
-    await sub_workflow.pre_actions(form);
+    await orchestrator.pre_actions(form);
     if (form.doc.__islocal) {
       form.set_df_property("main_eqp_serial_no", 'read_only', 0);
     }
@@ -53,7 +54,7 @@ frappe.ui.form.on("Ticket", {
     ticket_utils.fields_listener(form);
     await ticket_utils.set_service_partner(form);
     await ticket_utils.trigger_create_sn_into_db(form);
-    await sub_workflow.pre_actions(form);
+    await orchestrator.pre_actions(form);
   },
   before_load: async (form: FrappeForm<Ticket>) => {
     // await ticket_utils.set_service_partner(form);

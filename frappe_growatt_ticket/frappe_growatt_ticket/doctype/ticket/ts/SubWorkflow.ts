@@ -1,4 +1,3 @@
-
 import { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
 
 /**
@@ -29,7 +28,7 @@ const subWorkflow: Record<string, {
     doctype: "Initial Analysis",
     requiredState: "Finished",
     dependencies: [],
-    canAdvanceTo: ["Checklist", "Proposed Dispatch"],
+    canAdvanceTo: ["Checklist"],
     skipValidation: true
   },
   "Checklist": {
@@ -41,7 +40,7 @@ const subWorkflow: Record<string, {
     },
     requiredState: "Finished",
     dependencies: ["Initial Analysis"],
-    canAdvanceTo: ["Compliance Statement", "Proposed Dispatch"],
+    canAdvanceTo: [],
     prepareData: async (form) => {
       // Coleta informações necessárias do Initial Analysis
       const main_eqp_has_battery = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'main_eqp_has_battery');
@@ -52,7 +51,7 @@ const subWorkflow: Record<string, {
       const ext_fault_date = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'ext_fault_date');
       const ext_fault_code = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'ext_fault_code');
       const ext_fault_customer_description = await agt.utils.get_value_from_any_doc(form, 'Initial Analysis', 'ticket_docname', 'ext_fault_customer_description');
-      
+
       return {
         main_eqp_has_battery,
         main_eqp_has_sem,
@@ -68,13 +67,13 @@ const subWorkflow: Record<string, {
   "Proposed Dispatch": {
     doctype: "Proposed Dispatch",
     requiredState: "Finished",
-    dependencies: ["Checklist"],
+    dependencies: ["Initial Analysis"],
     canAdvanceTo: ["Compliance Statement"]
   },
   "Compliance Statement": {
     doctype: "Compliance Statement",
     requiredState: "Finished",
-    dependencies: ["Checklist", "Proposed Dispatch"],
+    dependencies: ["Proposed Dispatch"],
     canAdvanceTo: ["Logistics"]
   }
 };
@@ -85,7 +84,7 @@ const subWorkflow: Record<string, {
 function resolveDoctypeName(form: FrappeForm, subWorkflowKey: string): string {
   const config = subWorkflow[subWorkflowKey];
   if (!config) throw new Error(`No configuration for: ${subWorkflowKey}`);
-  
+
   return typeof config.doctype === 'function' ? config.doctype(form) : config.doctype;
 }
 
@@ -101,31 +100,31 @@ async function validateCreationFlow(
   if (!config || !config.dependencies || config.dependencies.length === 0) {
     return { isValid: true };
   }
-  
+
   // Verifica se pelo menos uma dependência está satisfeita
   for (const depKey of config.dependencies) {
     const depConfig = subWorkflow[depKey];
     if (!depConfig) continue;
-    
+
     const doctypeToCheck = resolveDoctypeName(form, depKey);
-    
-    const existingDocs = await frappe.db.get_list(doctypeToCheck, {
-      filters: { 
-        ticket_docname: form.doc.name,
-        workflow_state: depConfig.requiredState
+
+    // Buscar todos e filtrar em memória por workflow_state
+    const docs = await frappe.db.get_list(doctypeToCheck, {
+      filters: {
+        ticket_docname: form.doc.name
       },
-      fields: ['name'],
+      fields: ['name', 'workflow_state'],
     });
-    
+    const existingDocs = docs.filter(doc => doc.workflow_state === depConfig.requiredState);
     if (existingDocs && existingDocs.length > 0) {
       return { isValid: true };
     }
   }
-  
+
   // Nenhuma dependência satisfeita
   const depNames = config.dependencies.map(d => resolveDoctypeName(form, d)).join(" or ");
   const targetDoctype = resolveDoctypeName(form, subWorkflowKey);
-  
+
   return {
     isValid: false,
     errorMessage: `Cannot create ${targetDoctype}: ${depNames} must be in 'Finished' state first.`
@@ -142,13 +141,13 @@ async function createSubWorkflowDoctype(
 ): Promise<string | null> {
   if ((form as any)._subworkflow_creating) return null;
   (form as any)._subworkflow_creating = true;
-  
+
   try {
     const config = subWorkflow[subWorkflowKey];
     if (!config) throw new Error(`No configuration for: ${subWorkflowKey}`);
-    
+
     const doctypeName = resolveDoctypeName(form, subWorkflowKey);
-    
+
     // Validação do fluxo
     if (!config.skipValidation) {
       const validation = await validateCreationFlow(form, subWorkflowKey);
@@ -157,60 +156,57 @@ async function createSubWorkflowDoctype(
         return null;
       }
     }
-    
+
     // Verifica se já existe o doctype vinculado
     const existingDocs = await frappe.db.get_list(doctypeName, {
       filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
-    
     if (existingDocs && existingDocs.length > 0) {
       const existing_list_html = existingDocs.map(doc => `<li>${doc.name}</li>`).join("");
       console.warn(`Already exists a ${doctypeName} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
-      
       // Atualiza o sub_workflow mesmo que já exista
       await form.set_value('sub_workflow', subWorkflowKey);
       form.doc['sub_workflow'] = subWorkflowKey;
       form.dirty();
       await form.save();
-      
       return null;
     }
-    
+
     // Prepara dados adicionais se houver função prepareData configurada
     let additionalData: Record<string, any> = { ticket_docname: "docname" };
     if (config.prepareData) {
       const preparedData = await config.prepareData(form);
       additionalData = { ...additionalData, ...preparedData };
     }
-    
+
     // Cria o novo doctype com os dados preparados
     const docname = await agt.utils.doc.create_doc(doctypeName, additionalData, form.fields_dict);
     if (!docname) throw new Error(`Failed to create ${doctypeName}`);
-    
+
     // Obtém o workflow_state do documento criado
     const doc = await frappe.db.get_value(doctypeName, docname, ['workflow_state']);
     const workflow_state = doc?.message?.workflow_state || 'Draft';
-    
+
     // Adiciona na tabela tracker
     await agt.utils.table.row.add_one(form, "child_tracker_table", {
       child_tracker_docname: docname,
       child_tracker_doctype: doctypeName,
       child_tracker_workflow_state: workflow_state
     });
-    
+
     // Atualiza o sub_workflow e salva
     await form.set_value('sub_workflow', subWorkflowKey);
     form.doc['sub_workflow'] = subWorkflowKey;
     form.dirty();
     await form.save();
-    
+
     // Mensagem de sucesso
     frappe.show_alert({
       message: __(`${doctypeName} created successfully. Advanced to: ${subWorkflowKey}`),
       indicator: 'green'
     }, 5);
-    
+
     return docname;
   } finally {
     (form as any)._subworkflow_creating = false;
@@ -234,17 +230,16 @@ async function handleSubWorkflowStep(form: FrappeForm, subWorkflowKey: string) {
  */
 async function recoverSubWorkflowSoftLock(form: FrappeForm, subWorkflowKey: string) {
   if (form.doc['sub_workflow'] !== subWorkflowKey) return;
-  
+
   try {
     const doctypeName = resolveDoctypeName(form, subWorkflowKey);
-    
+
     const existingDocs = await frappe.db.get_list(doctypeName, {
       filters: { ticket_docname: form.doc.name },
       fields: ['name'],
     });
-    
     if (existingDocs && existingDocs.length > 0) return;
-    
+
     console.warn(`⚠️ Soft lock detected: sub_workflow is in '${subWorkflowKey}' but there is no ${doctypeName} linked. Creating automatically...`);
     await handleSubWorkflowStep(form, subWorkflowKey);
   } catch (error) {
@@ -279,21 +274,27 @@ function moveFowardButton(form: FrappeForm) {
       primary_action_label: __("Advance"),
       primary_action: async (values: any) => {
         const status = values.next_status;
-        frappe.confirm(
-          __("Confirming will advance to substep <b>" + status + "</b>. Do you want to proceed?"),
-          async () => {
-            await form.set_value('sub_workflow', status);
-            form.doc['sub_workflow'] = status;
-            form.dirty();
-            await form.save();
-            frappe.msgprint(__("Substep advanced to: " + status));
-            agt.utils.dialog.close_by_title(dialogTitle);
-          },
-          () => {
-            frappe.msgprint(__("Action cancelled."));
-            agt.utils.dialog.close_by_title(dialogTitle);
-          }
-        );
+        // Validação do fluxo antes de avançar
+        const validation = await validateCreationFlow(form, status);
+        if (validation.isValid) {
+          frappe.confirm(
+            __("Confirming will advance to substep <b>" + status + "</b>. Do you want to proceed?"),
+            async () => {
+              await form.set_value('sub_workflow', status);
+              form.doc['sub_workflow'] = status;
+              form.dirty();
+              await form.save();
+              frappe.msgprint(__("Substep advanced to: " + status));
+              agt.utils.dialog.close_by_title(dialogTitle);
+            },
+            () => {
+              frappe.msgprint(__("Action cancelled."));
+              agt.utils.dialog.close_by_title(dialogTitle);
+            }
+          );
+        } else {
+          frappe.msgprint(__(validation.errorMessage || `Cannot advance to substep: ${status}`));
+        }
       }
     });
   }) as unknown as JQuery<HTMLElement>;
@@ -319,7 +320,7 @@ function moveFowardButton(form: FrappeForm) {
   }
 }
 
-const sub_workflow = {
+const orchestrator = {
   pre_actions: async function (form: FrappeForm) {
     const workflow_state = form.doc.workflow_state;
     const sub_workflow_value = form.doc['sub_workflow'];
@@ -329,33 +330,42 @@ const sub_workflow = {
     if (workflow_state != agt.metadata.doctype.ticket.workflow_state.draft.name && workflow_state != agt.metadata.doctype.ticket.workflow_state.active.name) {
       return;
     }
-    
+
     // Tenta recuperar de soft lock antes de prosseguir (para todas as etapas configuradas)
     for (const subWorkflowKey of Object.keys(subWorkflow)) {
       await recoverSubWorkflowSoftLock(form, subWorkflowKey);
     }
-    
-    // Fluxo automático de criação baseado no sub_workflow atual
-    // Valida dependências antes de criar cada etapa
+
+    // Step 1: Creating 'Initial Analysis' if not exists
     if (sub_workflow_value !== "Initial Analysis" && (sub_workflow_value === "" || sub_workflow_value === null || sub_workflow_value === undefined)) {
       const validation = await validateCreationFlow(form, "Initial Analysis");
       if (validation.isValid) {
         await handleSubWorkflowStep(form, "Initial Analysis");
       }
     }
-    if (sub_workflow_value !== "Checklist" && (sub_workflow_value === "Initial Analysis")) {
-      const validation = await validateCreationFlow(form, "Checklist");
-      if (validation.isValid) {
+    // Step 2: Creating 'Checklist' if not exists and if criteria met
+    if (sub_workflow_value === "Initial Analysis" && sub_workflow_value !== "Checklist") {
+      const docs = (await frappe.db.get_list("Initial Analysis", {
+        filters: {
+          ticket_docname: form.doc.name
+        },
+        fields: ["name", "workflow_state", "solution_select"]
+      })).filter(doc => doc.workflow_state === "Finished" && doc.solution_select === "Deep Analysis");
+      if (docs && docs.length > 0) {
         await handleSubWorkflowStep(form, "Checklist");
       }
     }
-    if (sub_workflow_value !== "Proposed Dispatch" && (sub_workflow_value === "Checklist" || sub_workflow_value === "Compliance Statement")) {
-      const validation = await validateCreationFlow(form, "Proposed Dispatch");
-      if (validation.isValid) {
-        await handleSubWorkflowStep(form, "Proposed Dispatch");
+    // Step 3: Creating 'Proposed Dispatch' if not exists
+    frappe.ui.form.on("Ticket", {
+      add_pre_order_button: async (form: FrappeForm) => {
+        const validation = await validateCreationFlow(form, "Proposed Dispatch");
+        if (validation.isValid) {
+          await handleSubWorkflowStep(form, "Proposed Dispatch");
+        }
       }
-    }
-    if (sub_workflow_value !== "Compliance Statement" && (sub_workflow_value === "Proposed Dispatch" || sub_workflow_value === "Checklist")) {
+    });
+    // Step 4: Creating 'Compliance Statement' if not exists
+    if ((sub_workflow_value === "Proposed Dispatch" || sub_workflow_value === "Checklist") && sub_workflow_value !== "Compliance Statement") {
       const validation = await validateCreationFlow(form, "Compliance Statement");
       if (validation.isValid) {
         await handleSubWorkflowStep(form, "Compliance Statement");
@@ -364,4 +374,4 @@ const sub_workflow = {
     moveFowardButton(form); // trigger move forward button
   }
 };
-export { sub_workflow };
+export { orchestrator };

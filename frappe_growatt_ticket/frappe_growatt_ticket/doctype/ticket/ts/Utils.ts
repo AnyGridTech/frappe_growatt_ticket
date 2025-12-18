@@ -60,9 +60,13 @@ const ticket_utils = {
       }
     });
   },
-  fields_handler: function fields_handler(frm: FrappeForm<Ticket>) {
+  fields_handler: async function fields_handler(frm: FrappeForm<Ticket>) {
 
     agt.utils.form.set_button_primary_style(frm, 'add_child_button');
+    agt.utils.form.set_button_primary_style(frm, 'add_pre_order_button');
+
+    // Controla visibilidade do botão add_pre_order_button
+    await ticket_utils.check_pre_order_button_visibility(frm);
 
     // setup const to grab workflow state by number
     const workflowStates = agt.metadata.doctype.ticket.workflow_state;
@@ -86,6 +90,65 @@ const ticket_utils = {
       frm,
       Object.fromEntries(['colbreak_eqp_3'].map(f => [f, { read_only: currentStateId >= 2 ? 1 : 0 }]))
     );
+  },
+  check_pre_order_button_visibility: async function (frm: FrappeForm<Ticket>) {
+    if (!frm.doc.name || frm.doc.__islocal) {
+      frm.set_df_property('add_pre_order_button', 'hidden', 1);
+      return;
+    }
+
+    try {
+      // Verifica se já existe um Proposed Dispatch criado
+      const existingDispatches = await frappe.db.get_list("Proposed Dispatch", {
+        filters: { ticket_docname: frm.doc.name },
+        fields: ["name"],
+        limit: 1
+      });
+      if (existingDispatches?.length) {
+        frm.set_df_property('add_pre_order_button', 'hidden', 1);
+        return;
+      }
+
+      // Verifica se há um Initial Analysis com status "Finished" (filtra em memória)
+      const initialAnalysisAll = await frappe.db.get_list("Initial Analysis", {
+        filters: { ticket_docname: frm.doc.name },
+        fields: ["name", "workflow_state"],
+      });
+      const initialAnalysis = initialAnalysisAll.filter(doc => doc.workflow_state === "Finished");
+      if (initialAnalysis?.length) {
+        frm.set_df_property('add_pre_order_button', 'hidden', 0);
+        return;
+      }
+
+      // Configuração dos tipos de checklist possíveis
+      const checklistTypes = [
+        "Checklist of Inverter",
+        "Checklist of EV Charger",
+        "Checklist of Battery",
+        "Checklist of Smart Meter",
+        "Checklist of Smart Energy Manager",
+        "Checklist of Datalogger"
+      ];
+
+      // Verifica se há algum Checklist com status "Finished" (filtra em memória)
+      for (const checklistType of checklistTypes) {
+        const allChecklists = await frappe.db.get_list(checklistType, {
+          filters: { ticket_docname: frm.doc.name },
+          fields: ["name", "workflow_state"],
+        });
+        const checklists = allChecklists.filter(doc => doc.workflow_state === "Finished");
+        if (checklists && checklists.length > 0) {
+          frm.set_df_property('add_pre_order_button', 'hidden', 0);
+          return;
+        }
+      }
+
+      // Se não atende nenhuma condição, oculta o botão
+      frm.set_df_property('add_pre_order_button', 'hidden', 1);
+    } catch (error) {
+      console.error("Error checking pre-order button visibility:", error);
+      frm.set_df_property('add_pre_order_button', 'hidden', 1);
+    }
   },
   trigger_create_sn_into_db: async (frm: FrappeForm<Ticket>) => {
     if (frm.doc.__islocal) return;

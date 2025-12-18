@@ -6,7 +6,6 @@ frappe_growatt_ticket.setup = {
     frappe_growatt_ticket.src_form = cur_frm;
 
     await agt.corrections_tracker.run.run();
-    // await agt.corrections_tracker.table.setup();
     if (!(globalThis as any).workflow_preactions) {
       (globalThis as any).workflow_preactions = {};
     }

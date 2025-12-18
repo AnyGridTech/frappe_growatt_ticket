@@ -141,7 +141,7 @@ frappe.ui.form.on("Ticket", {
             label: "Select Model",
             fieldtype: "Link",
             options: "Item",
-            get_query: function() {
+            get_query: function () {
               return {
                 filters: [
                   ['Item', 'item_group', 'in', ['Inverter', 'EV Charger', 'Battery', 'Datalogger', 'Smart Meter', 'Smart Energy Manager']],
