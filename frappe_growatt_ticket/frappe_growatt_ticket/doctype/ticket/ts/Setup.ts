@@ -14,7 +14,7 @@ frappe_growatt_ticket.setup = {
       await agt.workflow.pre_action();
     });
     frappe.ui.form.on(form.doctype, 'refresh', async () => {
-      await agt.workflow.load_history_field();
+      // await agt.workflow.load_history_field();
     });
     frappe.ui.form.on(form.doctype, 'after_save', async () => {
       await agt.workflow.validate("SAVE");

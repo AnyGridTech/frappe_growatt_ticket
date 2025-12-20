@@ -36,7 +36,6 @@
         "main_eqp_end_firmware",
         "section_checklist_links",
         "add_child_button",
-        "add_pre_order_button",
         "child_tracker_html",
         "child_tracker_table",
         "tab_system",
@@ -253,13 +252,6 @@
             "fieldname": "add_child_button",
             "fieldtype": "Button",
             "label": "+ Create Derived",
-            "permlevel": 1
-        },
-        {
-            "depends_on": "eval:doc.workflow_state!=\"Draft\"\r\n",
-            "fieldname": "add_pre_order_button",
-            "fieldtype": "Button",
-            "label": "+ Create Pre-Order",
             "permlevel": 1
         },
         {

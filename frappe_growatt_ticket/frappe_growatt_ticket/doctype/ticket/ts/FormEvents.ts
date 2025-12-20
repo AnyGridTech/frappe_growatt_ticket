@@ -3,8 +3,7 @@
 import { SerialNo, InitialAnalysis, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
 import type { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
 import { ticket_utils } from "./Utils";
-// import { orchestrator } from "./Orchestrator_new";
-import { orchestrator } from "./SubWorkflow";
+import { orchestrator } from "./Orch";
 import "./Setup";
 
 declare var frappe_growatt_ticket: any;
@@ -35,11 +34,11 @@ frappe.ui.form.on("Ticket", {
     await ticket_utils.update_related_forms();
   },
   onload: async (form: FrappeForm<Ticket>) => {
-    frappe.tooltip.showUserTips({
-      form: form,
-      doctype: 'Tooltip',
-      docnames: ['1', '1']
-    });
+    // frappe.tooltip.showUserTips({
+    //   form: form,
+    //   doctype: 'Tooltip',
+    //   docnames: ['1', '1']
+    // });
     ticket_utils.fields_listener(form);
     ticket_utils.runSync(form);
     await ticket_utils.set_service_partner(form);

@@ -60,8 +60,6 @@
     },
     fields_handler: async function fields_handler(frm) {
       agt.utils.form.set_button_primary_style(frm, "add_child_button");
-      agt.utils.form.set_button_primary_style(frm, "add_pre_order_button");
-      await ticket_utils.check_pre_order_button_visibility(frm);
       const workflowStates = agt.metadata.doctype.ticket.workflow_state;
       const currentStateId = Object.values(workflowStates).find((state) => state.name === frm.doc.workflow_state)?.id || 0;
       const sectionStarting = [
@@ -80,55 +78,6 @@
         frm,
         Object.fromEntries(["colbreak_eqp_3"].map((f) => [f, { read_only: currentStateId >= 2 ? 1 : 0 }]))
       );
-    },
-    check_pre_order_button_visibility: async function(frm) {
-      if (!frm.doc.name || frm.doc.__islocal) {
-        frm.set_df_property("add_pre_order_button", "hidden", 1);
-        return;
-      }
-      try {
-        const existingDispatches = await frappe.db.get_list("Proposed Dispatch", {
-          filters: { ticket_docname: frm.doc.name },
-          fields: ["name"],
-          limit: 1
-        });
-        if (existingDispatches?.length) {
-          frm.set_df_property("add_pre_order_button", "hidden", 1);
-          return;
-        }
-        const initialAnalysisAll = await frappe.db.get_list("Initial Analysis", {
-          filters: { ticket_docname: frm.doc.name },
-          fields: ["name", "workflow_state"]
-        });
-        const initialAnalysis = initialAnalysisAll.filter((doc) => doc.workflow_state === "Finished");
-        if (initialAnalysis?.length) {
-          frm.set_df_property("add_pre_order_button", "hidden", 0);
-          return;
-        }
-        const checklistTypes = [
-          "Checklist of Inverter",
-          "Checklist of EV Charger",
-          "Checklist of Battery",
-          "Checklist of Smart Meter",
-          "Checklist of Smart Energy Manager",
-          "Checklist of Datalogger"
-        ];
-        for (const checklistType2 of checklistTypes) {
-          const allChecklists = await frappe.db.get_list(checklistType2, {
-            filters: { ticket_docname: frm.doc.name },
-            fields: ["name", "workflow_state"]
-          });
-          const checklists = allChecklists.filter((doc) => doc.workflow_state === "Finished");
-          if (checklists && checklists.length > 0) {
-            frm.set_df_property("add_pre_order_button", "hidden", 0);
-            return;
-          }
-        }
-        frm.set_df_property("add_pre_order_button", "hidden", 1);
-      } catch (error) {
-        console.error("Error checking pre-order button visibility:", error);
-        frm.set_df_property("add_pre_order_button", "hidden", 1);
-      }
     },
     trigger_create_sn_into_db: async (frm) => {
       if (frm.doc.__islocal) return;
@@ -518,7 +467,7 @@
     prev_main_eqp_serial_no = "";
   }
 
-  // frappe_growatt_ticket/doctype/ticket/ts/SubWorkflow.ts
+  // frappe_growatt_ticket/doctype/ticket/ts/Orch.ts
   var checklistType = {
     "Inverter": "Checklist of Inverter",
     "EV Charger": "Checklist of EV Charger",
@@ -532,7 +481,7 @@
       doctype: "Initial Analysis",
       requiredState: "Finished",
       dependencies: [],
-      canAdvanceTo: ["Checklist"],
+      canAdvanceTo: ["Checklist", "Proposed Dispatch"],
       skipValidation: true
     },
     "Checklist": {
@@ -544,7 +493,7 @@
       },
       requiredState: "Finished",
       dependencies: ["Initial Analysis"],
-      canAdvanceTo: [],
+      canAdvanceTo: ["Compliance Statement", "Proposed Dispatch"],
       prepareData: async (form) => {
         const main_eqp_has_battery = await agt.utils.get_value_from_any_doc(form, "Initial Analysis", "ticket_docname", "main_eqp_has_battery");
         const main_eqp_has_sem = await agt.utils.get_value_from_any_doc(form, "Initial Analysis", "ticket_docname", "main_eqp_has_sem");
@@ -569,13 +518,13 @@
     "Proposed Dispatch": {
       doctype: "Proposed Dispatch",
       requiredState: "Finished",
-      dependencies: ["Initial Analysis"],
+      dependencies: ["Checklist"],
       canAdvanceTo: ["Compliance Statement"]
     },
     "Compliance Statement": {
       doctype: "Compliance Statement",
       requiredState: "Finished",
-      dependencies: ["Proposed Dispatch"],
+      dependencies: ["Checklist", "Proposed Dispatch"],
       canAdvanceTo: ["Logistics"]
     }
   };
@@ -589,17 +538,40 @@
     if (!config || !config.dependencies || config.dependencies.length === 0) {
       return { isValid: true };
     }
+    if (subWorkflowKey === "Proposed Dispatch") {
+      const initialAnalysisDocs = await frappe.db.get_list("Initial Analysis", {
+        filters: {
+          ticket_docname: form.doc.name
+        },
+        fields: ["name"]
+      });
+      let foundDeepAnalysis = false;
+      if (initialAnalysisDocs.length > 0) {
+        for (const doc of initialAnalysisDocs) {
+          const docData = await frappe.db.get_value("Initial Analysis", doc.name, ["workflow_state", "solution_select"]);
+          if (docData?.message?.workflow_state === "Finished") {
+            if (docData?.message?.solution_select === "Deep Analysis") {
+              foundDeepAnalysis = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!foundDeepAnalysis) {
+        return { isValid: true };
+      }
+    }
     for (const depKey of config.dependencies) {
       const depConfig = subWorkflow[depKey];
       if (!depConfig) continue;
       const doctypeToCheck = resolveDoctypeName(form, depKey);
-      const docs = await frappe.db.get_list(doctypeToCheck, {
+      const existingDocs = await frappe.db.get_list(doctypeToCheck, {
         filters: {
-          ticket_docname: form.doc.name
+          ticket_docname: form.doc.name,
+          workflow_state: depConfig.requiredState
         },
-        fields: ["name", "workflow_state"]
+        fields: ["name"]
       });
-      const existingDocs = docs.filter((doc) => doc.workflow_state === depConfig.requiredState);
       if (existingDocs && existingDocs.length > 0) {
         return { isValid: true };
       }
@@ -712,26 +684,21 @@
         primary_action_label: __("Advance"),
         primary_action: async (values) => {
           const status = values.next_status;
-          const validation = await validateCreationFlow(form, status);
-          if (validation.isValid) {
-            frappe.confirm(
-              __("Confirming will advance to substep <b>" + status + "</b>. Do you want to proceed?"),
-              async () => {
-                await form.set_value("sub_workflow", status);
-                form.doc["sub_workflow"] = status;
-                form.dirty();
-                await form.save();
-                frappe.msgprint(__("Substep advanced to: " + status));
-                agt.utils.dialog.close_by_title(dialogTitle);
-              },
-              () => {
-                frappe.msgprint(__("Action cancelled."));
-                agt.utils.dialog.close_by_title(dialogTitle);
-              }
-            );
-          } else {
-            frappe.msgprint(__(validation.errorMessage || `Cannot advance to substep: ${status}`));
-          }
+          frappe.confirm(
+            __("Confirming will advance to substep <b>" + status + "</b>. Do you want to proceed?"),
+            async () => {
+              await form.set_value("sub_workflow", status);
+              form.doc["sub_workflow"] = status;
+              form.dirty();
+              await form.save();
+              frappe.msgprint(__("Substep advanced to: " + status));
+              agt.utils.dialog.close_by_title(dialogTitle);
+            },
+            () => {
+              frappe.msgprint(__("Action cancelled."));
+              agt.utils.dialog.close_by_title(dialogTitle);
+            }
+          );
         }
       });
     });
@@ -753,12 +720,13 @@
   }
   var orchestrator = {
     pre_actions: async function(form) {
+      if (!form.doc) return;
       const workflow_state = form.doc.workflow_state;
       const sub_workflow_value = form.doc["sub_workflow"];
-      if (!form.doc || form.doc.__islocal || !form.doc.name || !form.doc.creation || typeof form.doc.creation !== "string" || form.doc.creation.length === 0) {
+      if (form.doc.__islocal || !form.doc.name || !form.doc.creation || typeof form.doc.creation !== "string" || form.doc.creation.length === 0) {
         return;
       }
-      if (workflow_state != agt.metadata.doctype.ticket.workflow_state.draft.name && workflow_state != agt.metadata.doctype.ticket.workflow_state.active.name) {
+      if (workflow_state != "Draft" && workflow_state != agt.metadata.doctype.ticket.workflow_state.active.name) {
         return;
       }
       for (const subWorkflowKey of Object.keys(subWorkflow)) {
@@ -781,14 +749,49 @@
           await handleSubWorkflowStep(form, "Checklist");
         }
       }
-      frappe.ui.form.on("Ticket", {
-        add_pre_order_button: async (form2) => {
-          const validation = await validateCreationFlow(form2, "Proposed Dispatch");
-          if (validation.isValid) {
-            await handleSubWorkflowStep(form2, "Proposed Dispatch");
+      if ((sub_workflow_value === "Initial Analysis" || sub_workflow_value === "Checklist") && sub_workflow_value !== "Proposed Dispatch") {
+        const initialAnalysisDocs = await frappe.db.get_list("Initial Analysis", {
+          filters: {
+            ticket_docname: form.doc.name
+          },
+          fields: ["name"]
+        });
+        let checklistFinished = false;
+        const group = form.doc["main_eqp_group"];
+        const checklistDoctype = checklistType[group];
+        if (checklistDoctype) {
+          const checklistDocs = await frappe.db.get_list(checklistDoctype, {
+            filters: {
+              ticket_docname: form.doc.name
+            },
+            fields: ["name"]
+          });
+          for (const doc of checklistDocs) {
+            const docData = await frappe.db.get_value(checklistDoctype, doc.name, ["workflow_state"]);
+            if (docData?.message?.workflow_state === "Finished") {
+              checklistFinished = true;
+              break;
+            }
           }
         }
-      });
+        let shouldCreateProposedDispatch = false;
+        for (const doc of initialAnalysisDocs) {
+          const docData = await frappe.db.get_value("Initial Analysis", doc.name, ["workflow_state", "solution_select"]);
+          if (docData?.message?.workflow_state === "Finished") {
+            if (docData?.message?.solution_select !== "Deep Analysis") {
+              shouldCreateProposedDispatch = true;
+              break;
+            }
+            if (docData?.message?.solution_select === "Deep Analysis" && checklistFinished) {
+              shouldCreateProposedDispatch = true;
+              break;
+            }
+          }
+        }
+        if (shouldCreateProposedDispatch) {
+          await handleSubWorkflowStep(form, "Proposed Dispatch");
+        }
+      }
       if ((sub_workflow_value === "Proposed Dispatch" || sub_workflow_value === "Checklist") && sub_workflow_value !== "Compliance Statement") {
         const validation = await validateCreationFlow(form, "Compliance Statement");
         if (validation.isValid) {
@@ -814,7 +817,6 @@
         await agt.workflow.pre_action();
       });
       frappe.ui.form.on(form.doctype, "refresh", async () => {
-        await agt.workflow.load_history_field();
       });
       frappe.ui.form.on(form.doctype, "after_save", async () => {
         await agt.workflow.validate("SAVE");
@@ -846,11 +848,6 @@
       await ticket_utils.update_related_forms();
     },
     onload: async (form) => {
-      frappe.tooltip.showUserTips({
-        form,
-        doctype: "Tooltip",
-        docnames: ["1", "1"]
-      });
       ticket_utils.fields_listener(form);
       ticket_utils.runSync(form);
       await ticket_utils.set_service_partner(form);
