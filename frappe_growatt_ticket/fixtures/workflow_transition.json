@@ -1,0 +1,8 @@
+[
+  {"name": "Active-Finish-Finished", "state": "Active", "action": "Finish", "next_state": "Finished", "allowed": "All", "doctype": "Workflow Transition", "parent": "Ticket", "parenttype": "Workflow"},
+  {"name": "Active-Reject-Rejected", "state": "Active", "action": "Reject", "next_state": "Rejected", "allowed": "All", "doctype": "Workflow Transition", "parent": "Ticket", "parenttype": "Workflow"},
+  {"name": "Active-Hold-WaitingForCustomer", "state": "Active", "action": "Hold", "next_state": "Waiting for Customer", "allowed": "All", "doctype": "Workflow Transition", "parent": "Ticket", "parenttype": "Workflow"},
+  {"name": "WaitingForCustomer-Reactivate-Active", "state": "Waiting for Customer", "action": "Reactivate", "next_state": "Active", "allowed": "All", "doctype": "Workflow Transition", "parent": "Ticket", "parenttype": "Workflow"},
+  {"name": "Rejected-Cancel-Cancelled", "state": "Rejected", "action": "Cancel", "next_state": "Cancelled", "allowed": "All", "doctype": "Workflow Transition", "parent": "Ticket", "parenttype": "Workflow"},
+  {"name": "Rejected-Reactivate-Active", "state": "Rejected", "action": "Reactivate", "next_state": "Active", "allowed": "All", "doctype": "Workflow Transition", "parent": "Ticket", "parenttype": "Workflow"}
+]
