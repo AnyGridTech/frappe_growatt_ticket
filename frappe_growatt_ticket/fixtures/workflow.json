@@ -1,24 +1,116 @@
 [
   {
+    "docstatus": 0,
+    "doctype": "Workflow",
     "name": "Ticket",
     "workflow_name": "Ticket",
     "document_type": "Ticket",
     "is_active": 1,
     "workflow_state_field": "workflow_state",
     "states": [
-      {"state": "Active", "doc_status": 0, "allow_edit": "All"},
-      {"state": "Waiting for Customer", "doc_status": 0, "allow_edit": "All"},
-      {"state": "Finished", "doc_status": 0, "allow_edit": "All"},
-      {"state": "Rejected", "doc_status": 0, "allow_edit": "All"},
-      {"state": "Cancelled", "doc_status": 0, "allow_edit": "All"}
+      {
+        "docstatus": 0,
+        "doctype": "Workflow State",
+        "name": "Active",
+        "workflow_state_name": "Active",
+        "allow_edit": "All"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow State",
+        "name": "Waiting for Customer",
+        "workflow_state_name": "Waiting for Customer",
+        "allow_edit": "All"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow State",
+        "name": "Finished",
+        "workflow_state_name": "Finished",
+        "allow_edit": "All"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow State",
+        "name": "Rejected",
+        "workflow_state_name": "Rejected",
+        "allow_edit": "All"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow State",
+        "name": "Cancelled",
+        "workflow_state_name": "Cancelled",
+        "allow_edit": "All"
+      }
     ],
     "transitions": [
-      {"state": "Active", "action": "Finish", "next_state": "Finished", "allowed": "All"},
-      {"state": "Active", "action": "Reject", "next_state": "Rejected", "allowed": "All"},
-      {"state": "Active", "action": "Hold", "next_state": "Waiting for Customer", "allowed": "All"},
-      {"state": "Waiting for Customer", "action": "Reactivate", "next_state": "Active", "allowed": "All"},
-      {"state": "Rejected", "action": "Cancel", "next_state": "Cancelled", "allowed": "All"},
-      {"state": "Rejected", "action": "Reactivate", "next_state": "Active", "allowed": "All"}
+      {
+        "docstatus": 0,
+        "doctype": "Workflow Transition",
+        "state": "Active",
+        "action": "Finish",
+        "next_state": "Finished",
+        "allowed": "All",
+        "parent": "Ticket",
+        "parentfield": "transitions",
+        "parenttype": "Workflow"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow Transition",
+        "state": "Active",
+        "action": "Reject",
+        "next_state": "Rejected",
+        "allowed": "All",
+        "parent": "Ticket",
+        "parentfield": "transitions",
+        "parenttype": "Workflow"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow Transition",
+        "state": "Active",
+        "action": "Hold",
+        "next_state": "Waiting for Customer",
+        "allowed": "All",
+        "parent": "Ticket",
+        "parentfield": "transitions",
+        "parenttype": "Workflow"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow Transition",
+        "state": "Waiting for Customer",
+        "action": "Reactivate",
+        "next_state": "Active",
+        "allowed": "All",
+        "parent": "Ticket",
+        "parentfield": "transitions",
+        "parenttype": "Workflow"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow Transition",
+        "state": "Rejected",
+        "action": "Cancel",
+        "next_state": "Cancelled",
+        "allowed": "All",
+        "parent": "Ticket",
+        "parentfield": "transitions",
+        "parenttype": "Workflow"
+      },
+      {
+        "docstatus": 0,
+        "doctype": "Workflow Transition",
+        "state": "Rejected",
+        "action": "Reactivate",
+        "next_state": "Active",
+        "allowed": "All",
+        "parent": "Ticket",
+        "parentfield": "transitions",
+        "parenttype": "Workflow"
+      }
     ]
   }
 ]
