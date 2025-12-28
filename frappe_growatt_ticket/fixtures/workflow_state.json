@@ -1,42 +1,37 @@
 [
   {
-    "docstatus": 0,
-    "doctype": "Workflow State",
     "name": "Active",
     "workflow_state_name": "Active",
+    "doctype": "Workflow State",
     "style": "Primary",
-    "icon": ""
+    "doc_status": 0
   },
   {
-    "docstatus": 0,
-    "doctype": "Workflow State",
     "name": "Waiting for Customer",
     "workflow_state_name": "Waiting for Customer",
+    "doctype": "Workflow State",
     "style": "Warning",
-    "icon": ""
+    "doc_status": 0
   },
   {
-    "docstatus": 0,
-    "doctype": "Workflow State",
     "name": "Finished",
     "workflow_state_name": "Finished",
+    "doctype": "Workflow State",
     "style": "Success",
-    "icon": ""
+    "doc_status": 0
   },
   {
-    "docstatus": 0,
-    "doctype": "Workflow State",
     "name": "Rejected",
     "workflow_state_name": "Rejected",
+    "doctype": "Workflow State",
     "style": "Danger",
-    "icon": ""
+    "doc_status": 0
   },
   {
-    "docstatus": 0,
-    "doctype": "Workflow State",
     "name": "Cancelled",
     "workflow_state_name": "Cancelled",
+    "doctype": "Workflow State",
     "style": "Warning",
-    "icon": ""
+    "doc_status": 0
   }
 ]

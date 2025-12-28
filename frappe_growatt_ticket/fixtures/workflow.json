@@ -1,6 +1,5 @@
 [
   {
-    "docstatus": 0,
     "doctype": "Workflow",
     "name": "Ticket",
     "workflow_name": "Ticket",
@@ -9,104 +8,109 @@
     "workflow_state_field": "workflow_state",
     "states": [
       {
-        "docstatus": 0,
-        "doctype": "Workflow State",
+        "doctype": "Workflow Document State",
         "name": "Active",
+        "state": "Active",
         "workflow_state_name": "Active",
-        "allow_edit": "All"
+        "allow_edit": "All",
+        "doc_status": 0
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow State",
+        "doctype": "Workflow Document State",
         "name": "Waiting for Customer",
+        "state": "Waiting for Customer",
         "workflow_state_name": "Waiting for Customer",
-        "allow_edit": "All"
+        "allow_edit": "All",
+        "doc_status": 0
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow State",
+        "doctype": "Workflow Document State",
         "name": "Finished",
+        "state": "Finished",
         "workflow_state_name": "Finished",
-        "allow_edit": "All"
+        "allow_edit": "All",
+        "doc_status": 0
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow State",
+        "doctype": "Workflow Document State",
         "name": "Rejected",
+        "state": "Rejected",
         "workflow_state_name": "Rejected",
-        "allow_edit": "All"
+        "allow_edit": "All",
+        "doc_status": 0
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow State",
+        "doctype": "Workflow Document State",
         "name": "Cancelled",
+        "state": "Cancelled",
         "workflow_state_name": "Cancelled",
-        "allow_edit": "All"
+        "allow_edit": "All",
+        "doc_status": 0
       }
     ],
     "transitions": [
       {
-        "docstatus": 0,
-        "doctype": "Workflow Transition",
+        "name": "Active-Finish-Finished",
         "state": "Active",
         "action": "Finish",
         "next_state": "Finished",
         "allowed": "All",
+        "doctype": "Workflow Transition",
         "parent": "Ticket",
         "parentfield": "transitions",
         "parenttype": "Workflow"
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow Transition",
+        "name": "Active-Reject-Rejected",
         "state": "Active",
         "action": "Reject",
         "next_state": "Rejected",
         "allowed": "All",
+        "doctype": "Workflow Transition",
         "parent": "Ticket",
         "parentfield": "transitions",
         "parenttype": "Workflow"
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow Transition",
+        "name": "Active-Hold-WaitingForCustomer",
         "state": "Active",
         "action": "Hold",
         "next_state": "Waiting for Customer",
         "allowed": "All",
+        "doctype": "Workflow Transition",
         "parent": "Ticket",
         "parentfield": "transitions",
         "parenttype": "Workflow"
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow Transition",
+        "name": "WaitingForCustomer-Reactivate-Active",
         "state": "Waiting for Customer",
         "action": "Reactivate",
         "next_state": "Active",
         "allowed": "All",
+        "doctype": "Workflow Transition",
         "parent": "Ticket",
         "parentfield": "transitions",
         "parenttype": "Workflow"
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow Transition",
+        "name": "Rejected-Cancel-Cancelled",
         "state": "Rejected",
         "action": "Cancel",
         "next_state": "Cancelled",
         "allowed": "All",
+        "doctype": "Workflow Transition",
         "parent": "Ticket",
         "parentfield": "transitions",
         "parenttype": "Workflow"
       },
       {
-        "docstatus": 0,
-        "doctype": "Workflow Transition",
+        "name": "Rejected-Reactivate-Active",
         "state": "Rejected",
         "action": "Reactivate",
         "next_state": "Active",
         "allowed": "All",
+        "doctype": "Workflow Transition",
         "parent": "Ticket",
         "parentfield": "transitions",
         "parenttype": "Workflow"
