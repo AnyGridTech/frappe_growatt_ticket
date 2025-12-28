@@ -2,6 +2,7 @@
   {
     "docstatus": 0,
     "doctype": "Workflow",
+    "workflow_name": "Ticket",
     "document_type": "Ticket",
     "is_active": 1,
     "name": "Ticket",
