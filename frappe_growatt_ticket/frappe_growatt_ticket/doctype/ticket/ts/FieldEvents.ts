@@ -4,6 +4,55 @@ import { ticket_utils } from "./Utils";
 
 let prev_main_eqp_serial_no = '';
 
+// Helpers adapted from frappe_growatt_serial_no_workflow
+async function get_item_info_by_model(model: string) {
+  if (!model) return [];
+  let item_info = await frappe.db.get_list('Item', {
+    filters: { item_name: model },
+    fields: ['item_code', 'mppt', 'item_name']
+  }).catch(() => []);
+  if (!item_info || !item_info.length) {
+    const all_items = await frappe.db.get_list('Item', {
+      fields: ['item_code', 'mppt', 'item_name']
+    }).catch(() => []);
+    if (all_items && all_items.length) {
+      const normalize = (str: string) => str?.normalize('NFD').replace(/[^\w\s-]/g, '').toLowerCase();
+      const normalizedInput = normalize(model);
+      item_info = all_items.filter(item => normalize(item.item_name) === normalizedInput);
+    }
+  }
+  return item_info || [];
+}
+
+async function CheckSerialNumberForTicket(sn: string) {
+  if (!sn) return { item: undefined, snInfo: undefined, printError: 'Empty SN.', growattModel: undefined };
+  let snInfo;
+  try {
+    snInfo = await frappe.db.get_value<SerialNo>('Serial No', { serial_no: sn }, ['workflow_state', 'item_code', 'item_name', 'company'])
+      .then(r => r?.message || null)
+      .catch(() => null);
+  } catch (e) {
+    return { item: undefined, snInfo: undefined, printError: 'Error fetching SN info.', growattModel: undefined };
+  }
+  if (!snInfo || Object.keys(snInfo).length === 0) {
+    let sn2;
+    try {
+      sn2 = await agt?.utils?.get_growatt_sn_info?.(sn);
+    } catch (e) {
+      return { item: undefined, snInfo: undefined, printError: 'Error fetching SN from Growatt.', growattModel: undefined };
+    }
+    if (!sn2 || !sn2.data || !sn2.data.model) return { item: undefined, snInfo: undefined, printError: '', growattModel: undefined };
+    let item;
+    try {
+      item = await get_item_info_by_model(sn2.data.model);
+    } catch (e) {
+      return { item: undefined, snInfo: undefined, printError: 'Error fetching item info.', growattModel: sn2.data.model };
+    }
+    return { item, snInfo: undefined, printError: '', growattModel: sn2.data.model };
+  }
+  return { item: {}, snInfo, printError: '', growattModel: undefined };
+}
+
 frappe.ui.form.on("Ticket", {
   add_child_button: async (form: FrappeForm<Ticket>) => {
     if (!form.doc.name || form.doc.__islocal) {
@@ -51,137 +100,137 @@ frappe.ui.form.on("Ticket", {
     if (!serial_no?.length) return unsetFields(form);
     const proceed = agt.utils.validate_serial_number(serial_no) && serial_no !== prev_main_eqp_serial_no;
     if (!proceed) return unsetFields(form);
-    const sn1 = await frappe.db.get_value<SerialNo>('Serial No', serial_no, ['serial_no', 'item_code', 'warehouse', 'company', 'status'])
-      .catch(e => console.error(e))
-      .then(r => r?.message);
-    if (sn1 && sn1.item_code) {
-      console.log(sn1)
+
+    // Use unified checker
+    const { item, snInfo, growattModel } = await CheckSerialNumberForTicket(serial_no);
+
+    // If found in ERP (serial exists)
+    if (snInfo && snInfo.item_code) {
       form.set_value('main_eqp_serial_no', serial_no);
-      form.set_value('main_eqp_model_ref', sn1.item_code);
+      form.set_value('main_eqp_model_ref', snInfo.item_code);
+      form.set_value('main_eqp_model', snInfo.item_name || undefined);
       prev_main_eqp_serial_no = serial_no;
+      await ticket_utils.set_service_partner(form);
       return;
     }
-    unsetFields(form);
-    const check_mppt_routine = async function (item_name: string) {
-      // First try to find an exact match (to not break current functionality)
-      let item_info = await frappe.db
-        .get_list<Item>(
-          'Item',
-          {
-            filters: { item_name: item_name },
-            fields: ['item_code', 'mppt', 'item_name']
-          }
-        )
-        .catch(e => console.error(e));
 
-      // If not found with exact match, do the normalized search as fallback
-      if (!item_info || !item_info.length) {
-        const all_items = await frappe.db
-          .get_list<Item>(
-            'Item',
-            {
-              fields: ['item_code', 'mppt', 'item_name']
-            }
-          )
-          .catch(e => console.error(e));
+    // If Growatt returned model and we have item candidates
+    if (item && Array.isArray(item) && item.length) {
+      // Gather MPPT options and companies
+      const itemList = item;
+      const itemsWithMPPT = itemList.filter((i: any) => i.mppt != null);
+      const hasMPPT = itemsWithMPPT.length > 1;
+      const mpptOptions = hasMPPT ? itemsWithMPPT.map((i: any) => i.mppt as string) : [];
 
-        if (all_items && all_items.length) {
-          const normalizedInput = agt.utils.text.normalize(item_name);
-          item_info = all_items.filter(item =>
-            agt.utils.text.normalize(item.item_name) === normalizedInput
-          );
-        }
-      }
+      let companies: any[] = [];
+      try {
+        companies = await frappe.db.get_list('Company', { fields: ['name'], filters: { name: ['in', ['Anygrid', 'Growatt']] } });
+      } catch (e) { console.warn('Error fetching companies', e); }
+      const companyOptions = companies && companies.length ? companies.map(c => c.name) : [];
 
-      console.log(item_info);
-      if (!item_info || !item_info.length) return;
-      if (item_info.length === 1) {
-        form.set_value('main_eqp_serial_no', serial_no);
-        form.set_value('main_eqp_model_ref', item_info?.[0]?.item_code);
-        prev_main_eqp_serial_no = serial_no;
-        return;
-      }
-      const dialog_title = "Selecione a quantidade de MPPTs";
-      agt.utils.dialog.load({
-        title: dialog_title,
-        fields: [
-          {
-            fieldname: "mppt",
-            label: "MPPT",
-            fieldtype: "Select",
-            options: item_info
-              .filter((item) => item.mppt != null)
-              .map((item) => item.mppt as string),
-            reqd: true
-          }
-        ],
-        primary_action_label: "Select",
-        primary_action: async function (values) {
-          const mppt = values['mppt'];
-          if (!mppt) return;
-          const item = item_info.find((item) => item.mppt === mppt);
-          console.log(item)
-          agt.utils.dialog.close_by_title(dialog_title);
-          if (!item) return;
-          form.set_value('main_eqp_serial_no', serial_no);
-          form.set_value('main_eqp_model_ref', item.item_code);
-          prev_main_eqp_serial_no = serial_no;
+      const dialogTitle = __('Complete information for SN: ') + serial_no;
+      const dialogFields: any[] = [
+        {
+          fieldname: 'sn_display', label: __('Serial Number'), fieldtype: 'Data', default: serial_no, read_only: true
         },
-      })
-    }
-    const sn2 = await agt.utils.get_growatt_sn_info(serial_no);
-    if (!sn2 || !sn2.data || !sn2.data.model) {
-      unsetFields(form);
-      const dialog_title = "Select the equipment model";
-      agt.utils.dialog.load({
-        title: dialog_title,
-        fields: [
-          {
-            fieldname: "item_code",
-            label: "Select Model",
-            fieldtype: "Link",
-            options: "Item",
-            get_query: function () {
-              return {
-                filters: [
-                  ['Item', 'item_group', 'in', ['Inverter', 'EV Charger', 'Battery', 'Datalogger', 'Smart Meter', 'Smart Energy Manager']],
-                  ['Item', 'disabled', '=', 0]
-                ]
-              };
-            },
-            reqd: true
-          },
-        ],
-        primary_action_label: "Select",
-        primary_action: async function (values) {
-          const model = values['item_code'];
-          if (!model) return;
-          const item_info = await frappe.db
-            // .get_value<Item>('Item', { item_code: model }, 'item_name')
-            .get_value<Item>('Item', { item_code: model }, ['item_code', 'mppt', 'item_name'])
-            .catch(e => console.error(e))
-            .then(r => r?.message);
-          if (!item_info) return;
-          agt.utils.dialog.close_by_title(dialog_title);
-          await check_mppt_routine(item_info.item_name);
+        {
+          fieldname: 'model_display', label: __('Model'), fieldtype: 'Data', default: growattModel || '', read_only: true
+        }
+      ];
+      if (hasMPPT) {
+        dialogFields.push({ fieldname: 'mppt', label: 'MPPT', fieldtype: 'Select', options: mpptOptions, reqd: true });
+      }
+      if (companyOptions.length > 0) {
+        dialogFields.push({ fieldname: 'company', label: 'Company', fieldtype: 'Select', options: companyOptions, reqd: true });
+      }
+
+      const selectionPromise = new Promise<{ mppt?: string; company?: string } | null>((resolve) => {
+        let isResolved = false;
+        const dialog = agt.utils.dialog.load({
+          title: dialogTitle,
+          fields: dialogFields,
+          primary_action: function (values: any) {
+            isResolved = true;
+            agt.utils.dialog.close_by_title(dialogTitle);
+            resolve(values);
+          }
+        });
+        if (dialog && dialog['$wrapper']) {
+          dialog['$wrapper'].on('hide.bs.modal', function() {
+            if (!isResolved) { isResolved = true; resolve(null); }
+          });
         }
       });
+
+      const selectedValues = await selectionPromise;
+      if (!selectedValues) {
+        // cancelled
+        return;
+      }
+
+      // Determine selected item
+      let selectedItem: any = null;
+      if (hasMPPT && selectedValues.mppt) {
+        selectedItem = itemsWithMPPT.find((i: any) => String(i.mppt).trim() === String(selectedValues.mppt).trim());
+      } else if (itemList.length === 1) {
+        selectedItem = itemList[0];
+      } else if (!hasMPPT && itemList.length > 0) {
+        selectedItem = itemList[0];
+      }
+
+      if (!selectedItem) return;
+
+      form.set_value('main_eqp_serial_no', serial_no);
+      form.set_value('main_eqp_model_ref', selectedItem.item_code);
+      form.set_value('main_eqp_model', selectedItem.item_name);
+      form.set_value('main_eqp_mppt_number', selectedItem.mppt || undefined);
+      if (selectedValues.company) form.set_value('service_partner_company', selectedValues.company);
+      prev_main_eqp_serial_no = serial_no;
+      await ticket_utils.set_service_partner(form);
       return;
     }
-    // Check if there is a space before the TL
-    // If there isn't, then add it.
-    // Sometimes it comes as, for example, MIN 6000TL-X and
-    // in our DB the inverter models are registered as MIN 6000 TL-X
-    const filtered_name = (() => {
-      const model = sn2.data.model;
-      // Delete "Growatt " from the beginning of the model
-      const no_growatt = (model.includes('Growatt ')) ? model.split('Growatt ')[1] : model;
-      // Delete SPF 5000 ES 48VDC 230VAC the part after ES. It must end as SPF 5000 ES and delete the 48VDC 230VAC
-      const no_es_model = (no_growatt.includes('ES ')) ? no_growatt.split('ES ')[0] + 'ES' : no_growatt;
-      return no_es_model;
-    })();
-    await check_mppt_routine(filtered_name);
-    await ticket_utils.set_service_partner(form);
+
+    // Fallback: ask user to pick Item (existing behavior)
+    unsetFields(form);
+    const dialog_title = "Select the equipment model";
+    agt.utils.dialog.load({
+      title: dialog_title,
+      fields: [
+        {
+          fieldname: "item_code",
+          label: "Select Model",
+          fieldtype: "Link",
+          options: "Item",
+          get_query: function () {
+            return {
+              filters: [
+                ['Item', 'item_group', 'in', ['Inverter', 'EV Charger', 'Battery', 'Datalogger', 'Smart Meter', 'Smart Energy Manager']],
+                ['Item', 'disabled', '=', 0]
+              ]
+            };
+          },
+          reqd: true
+        },
+      ],
+      primary_action_label: "Select",
+      primary_action: async function (values) {
+        const model = values['item_code'];
+        if (!model) return;
+        const item_info = await frappe.db.get_value<Item>('Item', { item_code: model }, ['item_code', 'mppt', 'item_name']).catch(e => console.error(e)).then(r => r?.message);
+        if (!item_info) return;
+        agt.utils.dialog.close_by_title(dialog_title);
+        // reuse selection logic for mppt/company
+        const tmpItemList = [item_info];
+        if (tmpItemList.length === 1) {
+          form.set_value('main_eqp_serial_no', serial_no);
+          form.set_value('main_eqp_model_ref', item_info.item_code);
+          form.set_value('main_eqp_model', item_info.item_name);
+          form.set_value('main_eqp_mppt_number', item_info.mppt || undefined);
+          prev_main_eqp_serial_no = serial_no;
+          await ticket_utils.set_service_partner(form);
+        }
+      }
+    });
   },
   main_eqp_model: async (form: FrappeForm<Ticket>) => {
     ticket_utils.fields_handler(form);

@@ -196,7 +196,7 @@
         {
             "fieldname": "service_partner_company",
             "fieldtype": "Link",
-            "label": "Service Partner",
+            "label": "Company",
             "link_filters": "[[\"Company\",\"service_partner\",\"=\",1]]",
             "options": "Company",
             "permlevel": 1,
