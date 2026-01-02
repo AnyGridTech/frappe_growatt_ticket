@@ -498,15 +498,87 @@
           const item_info = await frappe.db.get_value("Item", { item_code: model }, ["item_code", "mppt", "item_name"]).catch((e) => console.error(e)).then((r) => r?.message);
           if (!item_info) return;
           agt.utils.dialog.close_by_title(dialog_title);
-          const tmpItemList = [item_info];
-          if (tmpItemList.length === 1) {
+          const itemList = [item_info];
+          const allItemsWithModel = await frappe.db.get_list("Item", {
+            filters: { item_name: item_info.item_name },
+            fields: ["item_code", "mppt", "item_name"]
+          }).catch(() => []);
+          const itemsToCheck = allItemsWithModel.length > 1 ? allItemsWithModel : itemList;
+          const itemsWithMPPT = itemsToCheck.filter((i) => i.mppt != null);
+          const hasMPPT = itemsWithMPPT.length > 1;
+          const mpptOptions = hasMPPT ? itemsWithMPPT.map((i) => i.mppt) : [];
+          let companies = [];
+          try {
+            companies = await frappe.db.get_list("Company", { fields: ["name"], filters: { name: ["in", ["Anygrid", "Growatt"]] } });
+          } catch (e) {
+            console.warn("Error fetching companies", e);
+          }
+          const companyOptions = companies && companies.length ? companies.map((c) => c.name) : [];
+          if (!hasMPPT && companyOptions.length === 0) {
             form.set_value("main_eqp_serial_no", serial_no);
             form.set_value("main_eqp_model_ref", item_info.item_code);
             form.set_value("main_eqp_model", item_info.item_name);
             form.set_value("main_eqp_mppt_number", item_info.mppt || void 0);
             prev_main_eqp_serial_no = serial_no;
             await ticket_utils.set_service_partner(form);
+            return;
           }
+          const detailsDialogTitle = __("Complete information for SN: ") + serial_no;
+          const detailsFields = [
+            {
+              fieldname: "sn_display",
+              label: __("Serial Number"),
+              fieldtype: "Data",
+              default: serial_no,
+              read_only: true
+            },
+            {
+              fieldname: "model_display",
+              label: __("Model"),
+              fieldtype: "Data",
+              default: item_info.item_name || "",
+              read_only: true
+            }
+          ];
+          if (hasMPPT) {
+            detailsFields.push({ fieldname: "mppt", label: "MPPT", fieldtype: "Select", options: mpptOptions, reqd: true });
+          }
+          if (companyOptions.length > 0) {
+            detailsFields.push({ fieldname: "company", label: "Company", fieldtype: "Select", options: companyOptions, reqd: true });
+          }
+          const detailsPromise = new Promise((resolve) => {
+            let isResolved = false;
+            const dialog = agt.utils.dialog.load({
+              title: detailsDialogTitle,
+              fields: detailsFields,
+              primary_action: function(values2) {
+                isResolved = true;
+                agt.utils.dialog.close_by_title(detailsDialogTitle);
+                resolve(values2);
+              }
+            });
+            if (dialog && dialog["$wrapper"]) {
+              dialog["$wrapper"].on("hide.bs.modal", function() {
+                if (!isResolved) {
+                  isResolved = true;
+                  resolve(null);
+                }
+              });
+            }
+          });
+          const selectedDetails = await detailsPromise;
+          if (!selectedDetails) return;
+          let finalItem = item_info;
+          if (hasMPPT && selectedDetails.mppt) {
+            finalItem = itemsWithMPPT.find((i) => String(i.mppt).trim() === String(selectedDetails.mppt).trim()) || item_info;
+          }
+          form.set_value("main_eqp_serial_no", serial_no);
+          form.set_value("main_eqp_model_ref", finalItem.item_code);
+          form.set_value("main_eqp_model", finalItem.item_name);
+          form.set_value("main_eqp_mppt_number", finalItem.mppt || void 0);
+          if (selectedDetails.company) form.set_value("service_partner_company", selectedDetails.company);
+          prev_main_eqp_serial_no = serial_no;
+          await ticket_utils.set_service_partner(form);
         }
       });
     },
