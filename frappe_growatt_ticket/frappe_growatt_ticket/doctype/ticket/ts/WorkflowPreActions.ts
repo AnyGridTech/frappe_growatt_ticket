@@ -1,329 +1,161 @@
-// import type { ChecklistTracker } from "@anygridtech/frappe-agt-types/agt/doctype";
-// import type { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
-// import { WorkflowPreActions } from "@anygridtech/frappe-agt-types/agt/client/workflow/";
+import type { Item, SerialNo, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
+import { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
+import { WorkflowPreActions } from "@anygridtech/frappe-agt-types/agt/client/workflow/";
 
-// const preActionsChecklistConfig = [
-//   { group: "Inverter", doctype: "Checklist of Inverter", table_field: "child_tracker_table" },
-//   { group: "EV Charger", doctype: "Checklist of EV Charger", table_field: "child_tracker_table" },
-//   { group: "Battery", doctype: "Checklist of Battery", table_field: "child_tracker_table" },
-//   { group: "Smart Meter", doctype: "Checklist of Smart Meter", table_field: "child_tracker_table" },
-//   { group: "Smart Energy Manager", doctype: "Checklist of Smart Energy Manager", table_field: "child_tracker_table" },
-//   { group: "Datalogger", doctype: "Checklist of Datalogger", table_field: "child_tracker_table" },
-// ];
+const preActions = {
+  trigger_create_sn_into_db: async (frm: FrappeForm<Ticket> | FrappeForm<Record<string, any>>) => {
+    try {
+      // ============================================================
+      // STEP 1: Obter serial_no do Ticket via get_value_from_any_doc
+      // ============================================================
+      const serial_no = await agt.utils.get_value_from_any_doc(frm, 'Ticket', 'ticket_docname', 'main_eqp_serial_no');
+      if (!serial_no || typeof serial_no !== 'string' || !serial_no.trim()) {
+        throw new Error("Serial number not provided or invalid. Cannot proceed with Serial No creation.");
+      }
+      const db_sn = await frappe.db
+        .get_value<SerialNo>('Serial No', serial_no, ['serial_no', 'item_code', 'warehouse', 'company', 'status', 'workflow_state'])
+        .then(r => r?.message)
+        .catch(e => {
+          console.error("Error fetching Serial No:", e);
+          throw new Error("Failed to query Serial No from database: " + (e instanceof Error ? e.message : String(e)));
+        });
 
-// // const preactionFowardToSupport = {
-// //   check_service_partner: async (frm: FrappeForm) => {
-// //     const swa = frm.states.frm.selected_workflow_action;
-// //     const ws = frm.doc.workflow_state;
-// //     // if (ws !== growatt.namespace.initial_analysis.workflow_state.customer_finish_filling.name || swa !== growatt.namespace.initial_analysis.workflow_action.forward_to_support.name) return;
-// //   }
-// // };
+      // ============================================================
+      // STEP 3: Obter service_partner_company do Ticket
+      // ============================================================
+      const service_partner_company = await agt.utils.get_value_from_any_doc(frm, 'Ticket', 'ticket_docname', 'service_partner_company');
+      if (!service_partner_company || typeof service_partner_company !== 'string' || !service_partner_company.trim()) {
+        throw new Error("Service partner company not defined. Cannot proceed with Serial No creation.");
+      }
 
-// // Create Initial Analysis through the Ticket action trigger.
-// const createPreAnalysis = {
-//   create_pre_analysis: async (frm: FrappeForm) => {
-//     const swa = frm.states.frm.selected_workflow_action;
-//     const ws = frm.doc.workflow_state;
-//     const state = agt.metadata.doctype.ticket.workflow_state.draft.name;
-//     const action = agt.metadata.doctype.ticket.workflow_action.approve.name;
-//     const dt_name = "Initial Analysis";
-//     const fieldname = "child_tracker_table";
+      // ============================================================
+      // STEP 4: Validar se Serial No já existe com dados válidos
+      // ============================================================
+      // ⚠️ CORREÇÃO: Verifica se serial_no E item_code existem (não apenas se há chaves)
+      const hasValidSerialNo = (sn: any): boolean => {
+        return !!(sn?.serial_no && sn?.item_code);
+      };
 
-//     if (ws !== state || swa !== action)
-//       throw new Error(`Failed to advance workflow! The workflow state must be '${state}' and the selected action must be '${action}'.`);
+      if (hasValidSerialNo(db_sn)) {
+        // Serial No já existe - apenas atualiza workflow_state
+        console.log(`Serial No '${db_sn!.serial_no}' already exists. Updating workflow state...`);
+        
+        await agt.utils.update_workflow_state({
+          doctype: "Serial No",
+          docname: db_sn!.serial_no,
+          workflow_state: agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name,
+          ignore_workflow_validation: true
+        });
 
-//     const existingInitialAnalysis = await frappe.db.get_list(dt_name, {
-//       filters: { ticket_docname: frm.doc.name },
-//       fields: ['name'],
-//       limit: 1
-//     });
-//     if (existingInitialAnalysis && existingInitialAnalysis.length > 0) {
-//       const existing_list_html = existingInitialAnalysis.map(sp => `<li>${sp.name}</li>`).join("");
-//       throw new Error(`A ${dt_name} is already linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
-//     }
+        console.log(`✅ Serial No '${db_sn!.serial_no}' workflow state updated successfully.`);
+      } else {
+        // ============================================================
+        // STEP 5: Serial No não existe - criar novo registro
+        // ============================================================
+        console.log(`Serial No '${serial_no}' does not exist. Creating new record...`);
 
-//     try {
-//       console.log(`Creating ${dt_name} for Ticket ${frm.doc.name}`);
+        // Buscar detalhes do Item
+        const item = await frappe.db
+          .get_value<Item>('Item', { item_code: frm.doc['main_eqp_item_code'] }, ['item_name', 'item_code'])
+          .then(r => r?.message)
+          .catch(e => {
+            console.error("Error fetching Item:", e);
+            throw new Error("Failed to query Item from database: " + (e instanceof Error ? e.message : String(e)));
+          });
 
-//       const docname = await agt.utils.doc.create_doc(dt_name, { ticket_docname: "docname" }, frm.fields_dict);
-//       if (!docname) {
-//         throw new Error(`Failed to create ${dt_name}`);
-//       }
-//       console.log(`Initial Analysis created successfully: ${docname}`);
+        // ⚠️ CORREÇÃO: Validação mais robusta do item
+        if (!item || !item.item_code) {
+          throw new Error(`Item not found or invalid for item code: ${frm.doc['main_eqp_item_code']}`);
+        }
 
-//       // Find the workflow state of the newly created Initial Analysis
-//       console.log(`Fetching workflow state for ${docname}`);
-//       const checklist_doc = await frappe.db.get_value(dt_name, docname, ['workflow_state']);
-//       const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
-//       console.log(`Workflow state obtained: ${workflow_state}`);
+        // Preparar campos do Serial No
+        const serialNoFields: Record<string, any> = {
+          serial_no: { value: serial_no },
+          item_code: { value: item.item_code },
+          company: { value: service_partner_company },
+          status: { value: "Active" }
+        };
 
-//       // Add row to the child table
-//       console.log(`Adding entry to table ${fieldname}`);
-//       await agt.utils.table.row.add_one(frm, fieldname, {
-//         child_tracker_docname: docname,
-//         child_tracker_doctype: dt_name,
-//         child_tracker_workflow_state: workflow_state
-//       });
-//       frm.dirty();
-//       console.log(`Process of creating ${dt_name} completed successfully`);
-//     } catch (error) {
-//       console.error(`Erro ao processar checklist:`, error);
-//       throw new Error(`Erro ao processar checklist: ${error instanceof Error ? error.message : String(error)}`);
-//     }
-//     await frm.save(); // Make sure the changes will be saved
-//   }
-// };
+        // Criar novo Serial No
+        const sn_docname = await agt.utils.doc.create_doc<SerialNo>(
+          'Serial No', 
+          { docname: "ticket_docname" }, 
+          serialNoFields
+        );
 
-// // const preactionFinish = {
-// //   trigger_finish: async (frm: FrappeForm) => {
-// //     const swa = frm.states.frm.selected_workflow_action;
-// //     const ws = frm.doc.workflow_state;
-// //     const wsInput = growatt.namespace.initial_analysis.workflow_state.holding_action.name;
-// //     const wsOutput = growatt.namespace.initial_analysis.workflow_state.finished.name;
-// //     const swaMediator = growatt.namespace.initial_analysis.workflow_action.finish_service.name;
+        // ⚠️ CORREÇÃO: Validar se a criação retornou um docname válido
+        if (!sn_docname || typeof sn_docname !== 'string' || !sn_docname.trim()) {
+          throw new Error("Failed to create Serial No - no valid document name returned.");
+        }
 
-// //     if (ws !== wsInput || swa !== swaMediator)
-// //       throw new Error(`Falha ao avançar workflow: o estado do workflow deve ser '${wsInput}' e a ação selecionada deve ser '${swaMediator}'.`);
+        console.log(`✅ Serial No '${sn_docname}' created successfully.`);
 
-// //     const fieldsValidation = [
-// //       {
-// //         name: "solution_description",
-// //         depends_on: (frm: FrappeForm) => {
-// //           const ext_fault_customer_description = frm.doc.ext_fault_customer_description;
-// //           if (ext_fault_customer_description?.length < 15)
-// //             return `A descrição do label(${ext_fault_customer_description}) deve ter no mínimo 15 caracteres.`;
-// //         }
-// //       },
-// //       {
-// //         name: "solution_select",
-// //         depends_on: (frm: FrappeForm) => {
-// //           const solution_select = frm.doc.solution_select;
-// //           if (!solution_select) return "A solução deve ser selecionada.";
-// //           if (solution_select === "Abertura de Checklist") return "A solução aplicada deve ser condizente com a finalização do caso.";
-// //         }
-// //       },
-// //     ];
-// //     // Validate fields before proceeding
-// //     for (const field of fieldsValidation) {
-// //       if (field.depends_on) {
-// //         const error = field.depends_on(frm);
-// //         if (error) throw new Error(error);
-// //       }
-// //     }
-// //     const confirmDiag = frappe.confirm(
-// //       `Tem certeza que deseja avançar o workflow para '${wsOutput}'?`,
-// //       async () => {
-// //         await growatt.utils.update_workflow_state({
-// //           doctype: "Serial No",
-// //           docname: frm.doc.name,
-// //           workflow_state: growatt.namespace.ticket.workflow_state.finished.name,
-// //           ignore_workflow_validation: true
-// //         });
-// //         await frm.save();
-// //       },
-// //       () => {
-// //         return;
-// //       }
-// //     );
-// //     confirmDiag.set_primary_action("Sim");
-// //     confirmDiag.set_secondary_action_label("Não");
-// //     if (confirmDiag.set_title) confirmDiag.set_title("Confirmação");
-// //   }
-// // };
-// const preactionTechnicalAnalysis = {
-//   create_checklist: async (frm: FrappeForm) => {
-//     const swa = frm.states.frm.selected_workflow_action;
-//     const ws = frm.doc.workflow_state;
-//     const swa_request_checklist = agt.metadata.doctype.initial_analysis.workflow_action.request_checklist.name;
-//     const ws_holding_action = agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name;
+        // Atualizar workflow_state do novo Serial No
+        await agt.utils.update_workflow_state({
+          doctype: "Serial No",
+          docname: sn_docname,
+          workflow_state: agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name,
+          ignore_workflow_validation: true
+        });
 
-//     // Validação centralizada: todos os critérios devem ser atendidos
-//     if (
-//       ws !== ws_holding_action ||
-//       ws === undefined ||
-//       ws === "" ||
-//       ws === null ||
-//       swa !== swa_request_checklist ||
-//       swa === undefined ||
-//       swa === "" ||
-//       swa === null
-//     ) {
-//       throw new Error(`Unable to create checklist: workflow criteria not met.`);
-//     }
+        console.log(`✅ Serial No '${sn_docname}' workflow state set successfully.`);
+      }
+    } catch (error) {
+      // ⚠️ CORREÇÃO: Garantir que erros sejam propagados corretamente
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("❌ Error in trigger_create_sn_into_db:", errorMessage);
+      
+      // Lança o erro para interromper o workflow
+      throw new Error(`Serial No PreAction Failed: ${errorMessage}`);
+    }
+  },
 
-//     const main_eqp_group = frm.doc['main_eqp_group'];
-//     const pair = preActionsChecklistConfig.find(c => c.group === main_eqp_group);
-//     if (!pair) throw new Error(`Equipment group is not '${main_eqp_group}'`);
-//     const [doctype, fieldname] = [pair.doctype, pair.table_field];
+  orchestrator_redirect: async (frm: FrappeForm<Record<string, any>>) => {
+    try {
+      // Redireciona para o doctype Ticket, fechando o iframe do app frappe_iframe se necessário
+      if (typeof window !== 'undefined') {
+        const ticket_docname = frm?.doc['ticket_docname'];
+        if (!ticket_docname) {
+          console.warn("⚠️ ticket_docname not found. Skipping redirect.");
+          return;
+        }
 
-//     // Validação de checklists abertos
-//     const trackerRows = frm.doc[fieldname as keyof typeof frm.doc] as ChecklistTracker[];
-//     if (trackerRows?.length) {
-//       const not_rejected = trackerRows.filter(cit =>
-//         cit.child_tracker_workflow_state !== agt.metadata.doctype.initial_analysis.workflow_state.rejected.name &&
-//         cit.child_tracker_doctype === doctype
-//       );
-//       if (not_rejected?.length) {
-//         const available_list_html = not_rejected.map(cit => `<li> ${cit.child_tracker_docname || cit.name || 'No name'} </li>`).join("");
-//         throw new Error(`There are already one or more open checklists for this protocol: <br><ul>${available_list_html}</ul>`);
-//       }
-//     }
+        console.log(`🔄 Redirecting to Ticket: ${ticket_docname}`);
 
-//     try {
-//       console.log(`Creating checklist for ${doctype}`);
+        // Se estiver dentro de um iframe (frappe_iframe), envia mensagem para o parent
+        if (window.self !== window.top) {
+          window.parent.postMessage({
+            action: 'frappe_iframe_close_and_redirect',
+            target: `/app/ticket/${ticket_docname}`,
+            docname: ticket_docname
+          }, '*');
+        } else {
+          window.location.href = `/app/ticket/${ticket_docname}`;
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("❌ Error in orchestrator_redirect:", errorMessage);
+      // Não lança erro aqui pois redirect é não-crítico
+    }
+  }
+};
 
-//       const docname = await agt.utils.doc.create_doc(doctype, { ticket_docname: "docname" }, frm.fields_dict);
-//       if (!docname) {
-//         throw new Error(`Falha ao criar checklist '${doctype}'`);
-//       }
+// ============================================================
+// ⚠️ CORREÇÃO CRÍTICA: Remover duplicação de chave
+// Agora ambas as ações estão no mesmo objeto
+// ============================================================
+const wp: WorkflowPreActions = {
+  [agt.metadata.doctype.initial_analysis.workflow_action.finish.name]: {
+    "Create Serial No.": preActions.trigger_create_sn_into_db,
+    "Orchestrator Pre Actions": preActions.orchestrator_redirect
+  }
+};
 
-//       console.log(`Checklist criado com sucesso: ${docname}`);
+frappe.ui.form.on('Ticket', 'before_load', async () => {
+  if (!(globalThis as any).workflow_preactions) {
+    (globalThis as any).workflow_preactions = {};
+  }
+  Object.assign((globalThis as any).workflow_preactions, wp);
 
-//       // Busca o estado do workflow do checklist recém-criado
-//       console.log(`Buscando estado do workflow para ${docname}`);
-//       const checklist_doc = await frappe.db.get_value(doctype, docname, ['workflow_state']);
-//       const workflow_state = checklist_doc?.message?.workflow_state || 'Draft';
-//       console.log(`Estado do workflow obtido: ${workflow_state}`);
-
-//       // Adiciona linha à tabela de checklists
-//       console.log(`Adicionando entrada na tabela ${fieldname}`);
-//       await agt.utils.table.row.add_one(frm, fieldname, {
-//         child_tracker_docname: docname,
-//         child_tracker_doctype: doctype,
-//         child_tracker_workflow_state: workflow_state
-//       });
-
-//       frm.dirty();
-//       console.log(`Processo de criação de checklist concluído com sucesso`);
-//     } catch (error) {
-//       console.error(`Erro ao processar checklist:`, error);
-//       throw new Error(`Erro ao processar checklist: ${error instanceof Error ? error.message : String(error)}`);
-//     }
-//     await frm.save(); // Não remova
-//   }
-// };
-// // const preactionRequestDoc = {
-// //   create_compliance_statement: async (frm: FrappeForm) => {
-// //     const swa = frm.states.frm.selected_workflow_action;
-// //     const ws = frm.doc.workflow_state;
-// //     const swa_request_documentation = growatt.namespace.initial_analysis.workflow_action.request_documentation.name;
-// //     const ws_shipping_proposal = growatt.namespace.ticket.workflow_state.shippingProposal.name;
-
-// //     // Validação centralizada: todos os critérios devem ser atendidos
-// //     if (
-// //       ws !== ws_shipping_proposal ||
-// //       ws === undefined ||
-// //       ws === "" ||
-// //       ws === null ||
-// //       swa !== swa_request_documentation ||
-// //       swa === undefined ||
-// //       swa === "" ||
-// //       swa === null
-// //     ) {
-// //       throw new Error(`Não foi possível criar Compliance Statement: Critérios não atendidos.`);
-// //     }
-
-// //     const main_eqp_group = frm.doc.main_eqp_group;
-// //     const pair = preActionsChecklistConfig.find(c => c.group === main_eqp_group);
-// //     if (!pair) throw new Error(`Grupo do equipamento não é '${main_eqp_group}'`);
-// //     const [doctype, fieldname] = [pair.doctype, pair.table_field];
-
-// //     const checklist_table = frm.doc[fieldname] || [];
-// //     const shippingItems = frm.doc.proposed_dispatch_table || [];
-
-// //     if (!Array.isArray(shippingItems) || shippingItems.length === 0) {
-// //       throw new Error("A tabela de proposta de envio deve conter pelo menos um item.");
-// //     }
-
-// //     for (const item of shippingItems) {
-// //       if (!item.item_name || item.item_name.trim() === "") {
-// //         throw new Error("Todos os itens da tabela de proposta de envio devem ter o campo 'Nome do Item' preenchido.");
-// //       }
-// //       if (!item.item_quantity || item.item_quantity <= 0) {
-// //         throw new Error("A 'quantidade' de cada item deve ser maior ou igual a 1.");
-// //       }
-// //     }
-
-// //     // Verificar se há pelo menos um item do checklist concluído
-// //     const hasCompletedChecklist = checklist_table.some((row: any) => {
-// //       return row.child_tracker_doctype === doctype &&
-// //         row.child_tracker_workflow_state === "Concluído";
-// //     });
-// //     if (!hasCompletedChecklist) {
-// //       throw new Error(`É necessário ter pelo menos um item do checklist de ${main_eqp_group} marcado como "Concluído" antes de prosseguir.`);
-// //     }
-
-// //     const existing = await frappe.db.get_list('Compliance Statement', {
-// //       filters: { ticket_docname: frm.docname },
-// //       fields: ['name'],
-// //       limit: 1
-// //     });
-
-// //     if (existing && existing.length > 0) {
-// //       const existing_list_html = existing.map(cs => `<li>${cs.name}</li>`).join("");
-// //       throw new Error(`Já existe um Compliance Statement vinculado a este Ticket: <br><ul>${existing_list_html}</ul>`);
-// //     }
-
-// //     try {
-// //       console.log(`Criando Compliance Statement`);
-
-// //       const docname = await growatt.utils.create_doc("Compliance Statement", ["ticket_docname"], frm.fields_dict);
-
-// //       if (!docname) {
-// //         throw new Error(`Falha ao criar Compliance Statement`);
-// //       }
-
-// //       console.log(`Compliance Statement criado com sucesso: ${docname}`);
-
-// //       // growatt.utils.update_workflow_state({
-// //       //   doctype: "Ticket",
-// //       //   docname: cur_frm.docname,
-// //       //   workflow_state: growatt.namespace.ticket.workflow_state.compliance_statement.name,
-// //       //   ignore_workflow_validation: true,
-// //       // });
-
-// //       frappe.msgprint({
-// //         title: "Documentação Criada",
-// //         message: "Você será redirecionado para o documento de análise.",
-// //         indicator: 'blue'
-// //       });
-
-// //       setTimeout(() => {
-// //         const url = `/app/compliance-statement/${docname}`;
-// //         window.open(url, '_blank');
-// //       }, 3000);
-
-// //       frm.dirty();
-// //       console.log(`Processo de criação de Compliance Statement concluído com sucesso`);
-// //     } catch (error) {
-// //       console.error(`Erro ao processar Compliance Statement:`, error);
-// //       throw new Error(`Erro ao processar Compliance Statement: ${error instanceof Error ? error.message : String(error)}`);
-// //     }
-// //     await frm.save();
-// //   }
-// // };
-
-// const wp: WorkflowPreActions = {
-//   ["Solicitar Análise"]: {
-//     "Create Initial Analysis": createPreAnalysis.create_pre_analysis,
-//   },
-//   // [agt.metadata.doctype.initial_analysis.workflow_action.forward_to_support.name]: {
-//   //   "Decide Service Partner": preactionFowardToSupport.check_service_partner,
-//   // },
-//   [agt.metadata.doctype.initial_analysis.workflow_action.request_checklist.name]: {
-//     "Create 'Checklist'": preactionTechnicalAnalysis.create_checklist
-//   },
-//   // [agt.metadata.doctype.initial_analysis.workflow_action.finish_service.name]: {
-//   //   "Finish Protocol": preactionFinish.trigger_finish
-//   // },
-//   // [agt.metadata.doctype.initial_analysis.workflow_action.request_documentation.name]: {
-//   //   "Create 'Compliance Statement'": preactionRequestDoc.create_compliance_statement
-//   // }
-// };
-
-// frappe.ui.form.on('Ticket', 'before_load', async () => {
-//   if (!(globalThis as any).workflow_preactions) {
-//     (globalThis as any).workflow_preactions = {};
-//   }
-//   Object.assign((globalThis as any).workflow_preactions, wp);
-// });
+});

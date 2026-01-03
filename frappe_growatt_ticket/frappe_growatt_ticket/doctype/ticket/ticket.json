@@ -48,12 +48,12 @@
     ],
     "fields": [
         {
-            "default": "TICKET-.MM.YY.-.####",
+            "default": "TICKET-DD.DD.MM.YY.-.####",
             "fieldname": "naming_series",
             "fieldtype": "Select",
             "hidden": 1,
             "label": "Series",
-            "options": "TICKET-.MM.YY.-.####",
+            "options": "TICKET-.DD.MM.YY.-.####",
             "reqd": 1
         },
         {

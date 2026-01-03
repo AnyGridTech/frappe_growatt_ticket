@@ -83,5 +83,8 @@ frappe.ui.form.on("Ticket", {
       }
     }
   },
+  // before_workflow_action: async () => {
+  //   await agt.workflow.validate();
+  // }
 });
 
