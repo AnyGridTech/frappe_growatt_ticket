@@ -7,21 +7,21 @@ let prev_main_eqp_serial_no = '';
 // Helpers adapted from frappe_growatt_serial_no_workflow
 async function get_item_info_by_model(model: string) {
   if (!model) return [];
-  let item_info = await frappe.db.get_list('Item', {
-    filters: { item_name: model },
+  
+  // Busca todos os items
+  const all_items = await frappe.db.get_list('Item', {
     fields: ['item_code', 'mppt', 'item_name']
   }).catch(() => []);
-  if (!item_info || !item_info.length) {
-    const all_items = await frappe.db.get_list('Item', {
-      fields: ['item_code', 'mppt', 'item_name']
-    }).catch(() => []);
-    if (all_items && all_items.length) {
-      const normalize = (str: string) => str?.normalize('NFD').replace(/[^\w\s-]/g, '').toLowerCase();
-      const normalizedInput = normalize(model);
-      item_info = all_items.filter(item => normalize(item.item_name) === normalizedInput);
-    }
-  }
-  return item_info || [];
+  
+  if (!all_items || !all_items.length) return [];
+  
+  // Busca flexível usando agt.utils.text.normalize
+  const normalizedInput = agt.utils.text.normalize(model);
+  const filtered_items = all_items.filter(item => 
+    agt.utils.text.normalize(item.item_name) === normalizedInput
+  );
+  
+  return filtered_items || [];
 }
 
 async function CheckSerialNumberForTicket(sn: string) {
