@@ -285,7 +285,8 @@
           const doctype = $el.attr("data-doctype");
           const docname = $el.attr("data-docname");
           if (!doctype || !docname) return;
-          frappe.iframe.view._open_doc_modal(doctype, docname);
+          const doctypeSlug = doctype.toLowerCase().replace(/\s+/g, "-");
+          window.open(`/app/${doctypeSlug}/${docname}`, "_blank");
         });
       }
     }

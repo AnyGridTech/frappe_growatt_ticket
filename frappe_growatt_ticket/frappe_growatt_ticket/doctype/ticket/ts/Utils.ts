@@ -336,7 +336,13 @@ const ticket_utils = {
           const doctype = $el.attr('data-doctype');
           const docname = $el.attr('data-docname');
           if (!doctype || !docname) return;
-          (frappe as any).iframe.view._open_doc_modal(doctype, docname);
+          
+          // Open in new tab
+          const doctypeSlug = doctype.toLowerCase().replace(/\s+/g, '-');
+          window.open(`/app/${doctypeSlug}/${docname}`, '_blank');
+          
+          // Old iframe approach (commented out)
+          // (frappe as any).iframe.view._open_doc_modal(doctype, docname);
         });
     }
   },
