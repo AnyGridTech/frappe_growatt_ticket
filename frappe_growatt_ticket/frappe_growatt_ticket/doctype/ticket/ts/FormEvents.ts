@@ -1,6 +1,6 @@
 /// <reference path="./types/frappe-tooltip.d.ts" />
 
-import { SerialNo, InitialAnalysis, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
+import { SerialNo, Ticket } from "@anygridtech/frappe-agt-types/agt/doctype";
 import type { FrappeForm } from "@anygridtech/frappe-types/client/frappe/core";
 import { ticket_utils } from "./Utils";
 import { orchestrator } from "./Orch";
@@ -69,13 +69,13 @@ frappe.ui.form.on("Ticket", {
       .catch(e => console.error(e))
       .then(r => r?.message);
     if (serial_no) {
-      const initial_analysis = await frappe.db.get_list<InitialAnalysis>('Ticket', {
+      const ticket = await frappe.db.get_list<Ticket>('Ticket', {
         filters: { main_eqp_serial_no },
-        fields: ['name', 'docstatus'],
+        fields: ['name', 'docstatus', 'workflow_state'],
       }).catch(e => console.error(e));
-      if (initial_analysis && initial_analysis.length > 0) {
-        for (let sp of initial_analysis) {
-          if (sp.docstatus === 0) {
+      if (ticket && ticket.length > 0) {
+        for (let sp of ticket) {
+          if (sp.docstatus === 0 && sp.workflow_state === 'Active') {
             frappe.throw(__(` Serial number already has an active ticket: ${sp.name}`));
             return;
           }
