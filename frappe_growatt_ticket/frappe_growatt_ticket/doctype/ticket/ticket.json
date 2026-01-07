@@ -140,7 +140,7 @@
         {
             "fieldname": "main_eqp_mppt_number",
             "fieldtype": "Data",
-            "label": "Number of MPPTs",
+            "label": "MPPT Amount",
             "permlevel": 1,
             "read_only": 1
         },
@@ -248,6 +248,14 @@
             "label": "Derived Documents"
         },
         {
+            "description": "*<strong>Referenced</strong> with the document above. Access the link to view.",
+            "fieldname": "ticket_docname",
+            "fieldtype": "Link",
+            "label": "Referenced Protocol",
+            "options": "Ticket",
+            "read_only": 1
+        },
+        {
             "depends_on": "eval:doc.workflow_state!=\"Draft\"\r\n",
             "fieldname": "add_child_button",
             "fieldtype": "Button",
@@ -287,14 +295,6 @@
             "in_preview": 1,
             "in_standard_filter": 1,
             "label": "Sub-Workflow"
-        },
-        {
-            "description": "*<strong>Referenced</strong> with the document above. Access the link to view.",
-            "fieldname": "ticket_docname",
-            "fieldtype": "Link",
-            "label": "Referenced Protocol",
-            "options": "Ticket",
-            "read_only": 1
         },
         {
             "fieldname": "priority",

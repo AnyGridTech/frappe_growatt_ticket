@@ -67,9 +67,13 @@ frappe.ui.form.on("Ticket", {
     const confirmDiag = frappe.confirm(
       __("Are you sure you want to create a new child ticket?"),
       () => {
-        frappe.new_doc("Ticket", {
+        const childData: any = {
           ticket_docname: form.doc.name
-        });
+        };
+        if (form.doc.main_customer_email) {
+          childData.main_customer_email = form.doc.main_customer_email;
+        }
+        frappe.new_doc("Ticket", childData);
         console.log("Child created.", form.doc);
       },
       () => {

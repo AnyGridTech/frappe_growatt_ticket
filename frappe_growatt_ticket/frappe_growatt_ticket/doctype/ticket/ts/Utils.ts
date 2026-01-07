@@ -114,12 +114,20 @@ const ticket_utils = {
     // If db_sn is not defined or is empty, we will create a new record
 
     if (db_sn && hasKeys(db_sn)) {
-      // Serial Number found and has properties - update workflow state
+      // Serial Number found - check if workflow state is already correct
+      const targetWorkflowState = agt.metadata.doctype.ticket.workflow_state.active.name;
+      
+      if (db_sn.workflow_state === targetWorkflowState) {
+        // Already in correct state, no need to update
+        return;
+      }
+      
+      // Serial Number found and needs workflow state update
       try {
         await agt.utils.update_workflow_state({
           doctype: "Serial No",
           docname: db_sn.serial_no,
-          workflow_state: agt.metadata.doctype.ticket.workflow_state.active.name,
+          workflow_state: targetWorkflowState,
           ignore_workflow_validation: true
         });
         console.log("Estado de workflow do Serial No atualizado com sucesso:", db_sn.serial_no);

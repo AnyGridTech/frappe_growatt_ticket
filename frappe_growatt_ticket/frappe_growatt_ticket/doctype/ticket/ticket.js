@@ -97,11 +97,15 @@
         return;
       }
       if (db_sn && hasKeys(db_sn)) {
+        const targetWorkflowState = agt.metadata.doctype.ticket.workflow_state.active.name;
+        if (db_sn.workflow_state === targetWorkflowState) {
+          return;
+        }
         try {
           await agt.utils.update_workflow_state({
             doctype: "Serial No",
             docname: db_sn.serial_no,
-            workflow_state: agt.metadata.doctype.ticket.workflow_state.active.name,
+            workflow_state: targetWorkflowState,
             ignore_workflow_validation: true
           });
           console.log("Estado de workflow do Serial No atualizado com sucesso:", db_sn.serial_no);
@@ -346,9 +350,13 @@
       const confirmDiag = frappe.confirm(
         __("Are you sure you want to create a new child ticket?"),
         () => {
-          frappe.new_doc("Ticket", {
+          const childData = {
             ticket_docname: form.doc.name
-          });
+          };
+          if (form.doc.main_customer_email) {
+            childData.main_customer_email = form.doc.main_customer_email;
+          }
+          frappe.new_doc("Ticket", childData);
           console.log("Child created.", form.doc);
         },
         () => {
@@ -732,10 +740,9 @@
       if (existingDocs && existingDocs.length > 0) {
         const existing_list_html = existingDocs.map((doc2) => `<li>${doc2.name}</li>`).join("");
         console.warn(`Already exists a ${doctypeName} linked to this Ticket: <br><ul>${existing_list_html}</ul>`);
-        await form.set_value("sub_workflow", subWorkflowKey);
-        form.doc["sub_workflow"] = subWorkflowKey;
-        form.dirty();
-        await form.save();
+        if (form.doc["sub_workflow"] !== subWorkflowKey) {
+          await form.set_value("sub_workflow", subWorkflowKey);
+        }
         return null;
       }
       let additionalData = { ticket_docname: "docname" };
@@ -752,10 +759,9 @@
         child_tracker_doctype: doctypeName,
         child_tracker_workflow_state: workflow_state
       });
-      await form.set_value("sub_workflow", subWorkflowKey);
-      form.doc["sub_workflow"] = subWorkflowKey;
-      form.dirty();
-      await form.save();
+      if (form.doc["sub_workflow"] !== subWorkflowKey) {
+        await form.set_value("sub_workflow", subWorkflowKey);
+      }
       frappe.show_alert({
         message: __(`${doctypeName} created successfully. Advanced to: ${subWorkflowKey}`),
         indicator: "green"
@@ -816,7 +822,6 @@
             __("Confirming will advance to substep <b>" + status + "</b>. Do you want to proceed?"),
             async () => {
               await form.set_value("sub_workflow", status);
-              form.doc["sub_workflow"] = status;
               form.dirty();
               await form.save();
               frappe.msgprint(__("Substep advanced to: " + status));
@@ -1002,13 +1007,13 @@
       if (!main_eqp_serial_no) return;
       const serial_no = await frappe.db.get_value("Serial No", { serial_no: main_eqp_serial_no }, ["serial_no", "item_code", "warehouse", "company", "status"]).catch((e) => console.error(e)).then((r) => r?.message);
       if (serial_no) {
-        const initial_analysis = await frappe.db.get_list("Ticket", {
+        const ticket = await frappe.db.get_list("Ticket", {
           filters: { main_eqp_serial_no },
-          fields: ["name", "docstatus"]
+          fields: ["name", "docstatus", "workflow_state"]
         }).catch((e) => console.error(e));
-        if (initial_analysis && initial_analysis.length > 0) {
-          for (let sp of initial_analysis) {
-            if (sp.docstatus === 0) {
+        if (ticket && ticket.length > 0) {
+          for (let sp of ticket) {
+            if (sp.docstatus === 0 && sp.workflow_state === "Active") {
               frappe.throw(__(` Serial number already has an active ticket: ${sp.name}`));
               return;
             }
@@ -1023,70 +1028,98 @@
 
   // frappe_growatt_ticket/doctype/ticket/ts/WorkflowPreActions.ts
   var preActions = {
-    trigger_create_sn_into_db: async (frm) => {
-      try {
-        const serial_no = await agt.utils.get_value_from_any_doc(frm, "Ticket", "ticket_docname", "main_eqp_serial_no");
-        if (!serial_no || typeof serial_no !== "string" || !serial_no.trim()) {
-          throw new Error("Serial number not provided or invalid. Cannot proceed with Serial No creation.");
-        }
-        const db_sn = await frappe.db.get_value("Serial No", serial_no, ["serial_no", "item_code", "warehouse", "company", "status", "workflow_state"]).then((r) => r?.message).catch((e) => {
-          console.error("Error fetching Serial No:", e);
-          throw new Error("Failed to query Serial No from database: " + (e instanceof Error ? e.message : String(e)));
-        });
-        const service_partner_company = await agt.utils.get_value_from_any_doc(frm, "Ticket", "ticket_docname", "service_partner_company");
-        if (!service_partner_company || typeof service_partner_company !== "string" || !service_partner_company.trim()) {
-          throw new Error("Service partner company not defined. Cannot proceed with Serial No creation.");
-        }
-        const hasValidSerialNo = (sn) => {
-          return !!(sn?.serial_no && sn?.item_code);
-        };
-        if (hasValidSerialNo(db_sn)) {
-          console.log(`Serial No '${db_sn.serial_no}' already exists. Updating workflow state...`);
-          await agt.utils.update_workflow_state({
-            doctype: "Serial No",
-            docname: db_sn.serial_no,
-            workflow_state: agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name,
-            ignore_workflow_validation: true
-          });
-          console.log(`\u2705 Serial No '${db_sn.serial_no}' workflow state updated successfully.`);
-        } else {
-          console.log(`Serial No '${serial_no}' does not exist. Creating new record...`);
-          const item = await frappe.db.get_value("Item", { item_code: frm.doc["main_eqp_item_code"] }, ["item_name", "item_code"]).then((r) => r?.message).catch((e) => {
-            console.error("Error fetching Item:", e);
-            throw new Error("Failed to query Item from database: " + (e instanceof Error ? e.message : String(e)));
-          });
-          if (!item || !item.item_code) {
-            throw new Error(`Item not found or invalid for item code: ${frm.doc["main_eqp_item_code"]}`);
-          }
-          const serialNoFields = {
-            serial_no: { value: serial_no },
-            item_code: { value: item.item_code },
-            company: { value: service_partner_company },
-            status: { value: "Active" }
-          };
-          const sn_docname = await agt.utils.doc.create_doc(
-            "Serial No",
-            { docname: "ticket_docname" },
-            serialNoFields
-          );
-          if (!sn_docname || typeof sn_docname !== "string" || !sn_docname.trim()) {
-            throw new Error("Failed to create Serial No - no valid document name returned.");
-          }
-          console.log(`\u2705 Serial No '${sn_docname}' created successfully.`);
-          await agt.utils.update_workflow_state({
-            doctype: "Serial No",
-            docname: sn_docname,
-            workflow_state: agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name,
-            ignore_workflow_validation: true
-          });
-          console.log(`\u2705 Serial No '${sn_docname}' workflow state set successfully.`);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error("\u274C Error in trigger_create_sn_into_db:", errorMessage);
-        throw new Error(`Serial No PreAction Failed: ${errorMessage}`);
-      }
-    },
+    // trigger_create_sn_into_db: async (frm: FrappeForm<Ticket> | FrappeForm<Record<string, any>>) => {
+    //   try {
+    //     // ============================================================
+    //     // STEP 1: Get serial_no from Ticket
+    //     // ============================================================
+    //     const serial_no = frm.doc.main_eqp_serial_no;
+    //     if (!serial_no || typeof serial_no !== 'string' || !serial_no.trim()) {
+    //       throw new Error("Serial number not provided or invalid. Cannot proceed with Serial No creation.");
+    //     }
+    //     const db_sn = await frappe.db
+    //       .get_value<SerialNo>('Serial No', serial_no, ['serial_no', 'item_code', 'warehouse', 'company', 'status', 'workflow_state'])
+    //       .then(r => r?.message)
+    //       .catch(e => {
+    //         console.error("Error fetching Serial No:", e);
+    //         throw new Error("Failed to query Serial No from database: " + (e instanceof Error ? e.message : String(e)));
+    //       });
+    //     // ============================================================
+    //     // STEP 3: Get service_partner_company from Ticket
+    //     // ============================================================
+    //     const service_partner_company = frm.doc.service_partner_company;
+    //     if (!service_partner_company || typeof service_partner_company !== 'string' || !service_partner_company.trim()) {
+    //       throw new Error("Service partner company not defined. Cannot proceed with Serial No creation.");
+    //     }
+    //     // ============================================================
+    //     // STEP 4: Validate if Serial No already exists with valid data
+    //     // ============================================================
+    //     // ⚠️ FIX: Check if serial_no AND item_code exist (not just if there are keys)
+    //     const hasValidSerialNo = (sn: any): boolean => {
+    //       return !!(sn?.serial_no && sn?.item_code);
+    //     };
+    //     if (hasValidSerialNo(db_sn)) {
+    //       // Serial No already exists - just update workflow_state
+    //       console.log(`Serial No '${db_sn!.serial_no}' already exists. Updating workflow state...`);
+    //       await agt.utils.update_workflow_state({
+    //         doctype: "Serial No",
+    //         docname: db_sn!.serial_no,
+    //         workflow_state: agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name,
+    //         ignore_workflow_validation: true
+    //       });
+    //       console.log(`✅ Serial No '${db_sn!.serial_no}' workflow state updated successfully.`);
+    //     } else {
+    //       // ============================================================
+    //       // STEP 5: Serial No does not exist - create new record
+    //       // ============================================================
+    //       console.log(`Serial No '${serial_no}' does not exist. Creating new record...`);
+    //       // Fetch Item details
+    //       const item = await frappe.db
+    //         .get_value<Item>('Item', { item_code: frm.doc['main_eqp_item_code'] }, ['item_name', 'item_code'])
+    //         .then(r => r?.message)
+    //         .catch(e => {
+    //           console.error("Error fetching Item:", e);
+    //           throw new Error("Failed to query Item from database: " + (e instanceof Error ? e.message : String(e)));
+    //         });
+    //       // ⚠️ FIX: More robust item validation
+    //       if (!item || !item.item_code) {
+    //         throw new Error(`Item not found or invalid for item code: ${frm.doc['main_eqp_item_code']}`);
+    //       }
+    //       // Prepare Serial No fields
+    //       const serialNoFields: Record<string, any> = {
+    //         serial_no: { value: serial_no },
+    //         item_code: { value: item.item_code },
+    //         company: { value: service_partner_company },
+    //         status: { value: "Active" }
+    //       };
+    //       // Create new Serial No
+    //       const sn_docname = await agt.utils.doc.create_doc<SerialNo>(
+    //         'Serial No', 
+    //         { docname: "ticket_docname" }, 
+    //         serialNoFields
+    //       );
+    //       // ⚠️ FIX: Validate if creation returned a valid docname
+    //       if (!sn_docname || typeof sn_docname !== 'string' || !sn_docname.trim()) {
+    //         throw new Error("Failed to create Serial No - no valid document name returned.");
+    //       }
+    //       console.log(`✅ Serial No '${sn_docname}' created successfully.`);
+    //       // Update workflow_state of new Serial No
+    //       await agt.utils.update_workflow_state({
+    //         doctype: "Serial No",
+    //         docname: sn_docname,
+    //         workflow_state: agt.metadata.doctype.initial_analysis.workflow_state.holding_action.name,
+    //         ignore_workflow_validation: true
+    //       });
+    //       console.log(`✅ Serial No '${sn_docname}' workflow state set successfully.`);
+    //     }
+    //   } catch (error) {
+    //     // ⚠️ FIX: Ensure errors are propagated correctly
+    //     const errorMessage = error instanceof Error ? error.message : String(error);
+    //     console.error("❌ Error in trigger_create_sn_into_db:", errorMessage);
+    //     // Throw error to interrupt workflow
+    //     throw new Error(`Serial No PreAction Failed: ${errorMessage}`);
+    //   }
+    // },
     orchestrator_redirect: async (frm) => {
       try {
         if (typeof window !== "undefined") {
@@ -1114,7 +1147,7 @@
   };
   var wp = {
     [agt.metadata.doctype.initial_analysis.workflow_action.finish.name]: {
-      "Create Serial No.": preActions.trigger_create_sn_into_db,
+      // "Create Serial No.": preActions.trigger_create_sn_into_db,
       "Orchestrator Pre Actions": preActions.orchestrator_redirect
     }
   };
